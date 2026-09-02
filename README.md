@@ -76,7 +76,7 @@ docker run --rm --read-only --tmpfs /tmp:rw,noexec,nosuid,size=16m \
 
 At least one complete authentication method is required: set `PCC_SHARED_PASSWORD_HASH`, or set all four OIDC variables marked **With OIDC**. OIDC startup fails closed when discovery or required configuration is invalid. Omitting `PCC_SHARED_PASSWORD_HASH` disables shared-password login; there is no default or fallback password.
 
-After authentication initialization and listener binding succeed, the service writes a credential-free startup line such as `server started listen=:8080 auth_oidc=true auth_shared_password=false` to stdout.
+The service writes structured JSON lifecycle and authentication events to stdout. Fields never include passwords, hashes, session keys, authorization codes, tokens, cookies, state/nonce values, email addresses, or OIDC client secrets. See the Kubernetes deployment guide for event and reason codes.
 
 The OIDC callback path is fixed and requires no environment variable. Register the following exact redirect URI with the OIDC provider:
 

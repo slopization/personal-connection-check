@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -56,37 +57,46 @@ func main() {
 		fmt.Println(h)
 		return
 	}
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	slog.SetDefault(logger)
 	c, e := config.Load()
 	if e != nil {
-		fmt.Fprintln(os.Stderr, e)
+		logger.Error("configuration load failed", "event", "startup_failed", "reason", "configuration", "detail", e.Error())
 		os.Exit(2)
 	}
-	a, e := app.New(app.Config{Runtime: c})
+	a, e := app.New(app.Config{Runtime: c, Logger: logger})
 	if e != nil {
-		fmt.Fprintln(os.Stderr, e)
+		logger.Error("application initialization failed", "event", "startup_failed", "reason", "application_initialization", "detail", e.Error())
 		os.Exit(2)
 	}
 	server := &http.Server{Addr: c.Listen, Handler: a, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 20 * time.Second, WriteTimeout: 25 * time.Second, IdleTimeout: 60 * time.Second}
 	listener, e := net.Listen("tcp", c.Listen)
 	if e != nil {
 		a.Close()
-		fmt.Fprintln(os.Stderr, e)
+		logger.Error("listener bind failed", "event", "startup_failed", "reason", "listener_bind", "detail", e.Error())
 		os.Exit(2)
 	}
-	fmt.Println(startupMessage(c))
+	logger.Info("server started", "event", "server_started", "listen", c.Listen, "auth_oidc", c.OIDCIssuer != "", "auth_shared_password", c.PasswordHash != "")
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	errCh := make(chan error, 1)
 	go func() { errCh <- server.Serve(listener) }()
 	select {
 	case <-ctx.Done():
+		logger.Info("server shutdown started", "event", "server_shutdown_started")
 		a.Close()
 		drain, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_ = server.Shutdown(drain)
+		if shutdownErr := server.Shutdown(drain); shutdownErr != nil {
+			logger.Error("server shutdown failed", "event", "server_shutdown_failed", "reason", "drain_timeout", "detail", shutdownErr.Error())
+		} else {
+			logger.Info("server shutdown completed", "event", "server_shutdown_completed")
+		}
 	case e = <-errCh:
 		if e != nil && e != http.ErrServerClosed {
-			panic(e)
+			a.Close()
+			logger.Error("server stopped unexpectedly", "event", "server_failed", "reason", "serve", "detail", e.Error())
+			os.Exit(1)
 		}
 	}
 }

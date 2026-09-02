@@ -13,6 +13,7 @@ import (
 	"github.com/coder/websocket"
 
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -21,7 +22,10 @@ import (
 	"time"
 )
 
-type Config struct{ Runtime config.Config }
+type Config struct {
+	Runtime config.Config
+	Logger  *slog.Logger
+}
 type bucket struct {
 	tokens float64
 	at     time.Time
@@ -40,6 +44,7 @@ type App struct {
 	wsClose   map[*websocket.Conn]func()
 	closeOnce sync.Once
 	static    http.Handler
+	logger    *slog.Logger
 }
 
 var oidcDiscoveryTimeout = 5 * time.Second
@@ -97,6 +102,10 @@ func finishWatchedUpload(stop chan struct{}, watcherResult <-chan bool, body io.
 }
 
 func New(c Config) (*App, error) {
+	logger := c.Logger
+	if logger == nil {
+		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+	}
 	if c.Runtime.MaxRuns == 0 {
 		c.Runtime.MaxRuns = 2
 		c.Runtime.MaxStreams = 8
@@ -112,16 +121,19 @@ func New(c Config) (*App, error) {
 		}
 	}
 	c.Runtime.SessionCookieSecure = cookieSecure
-	a := &App{cfg: c.Runtime, sessions: auth.NewSessions(c.Runtime.SessionKeys, c.Runtime.SessionCookieSecure), runs: speedtest.New(c.Runtime.MaxRuns, 1, c.Runtime.MaxStreams, runTTL(c.Runtime.MaxDuration)), login: map[string]bucket{}, ws: make(chan struct{}, c.Runtime.MaxRuns*2), verify: make(chan struct{}, 2), wsClose: map[*websocket.Conn]func(){}, geo: networkinfo.Open(c.Runtime.GeoCity, c.Runtime.GeoASN), static: webui.Handler()}
+	a := &App{cfg: c.Runtime, sessions: auth.NewSessions(c.Runtime.SessionKeys, c.Runtime.SessionCookieSecure), runs: speedtest.New(c.Runtime.MaxRuns, 1, c.Runtime.MaxStreams, runTTL(c.Runtime.MaxDuration)), login: map[string]bucket{}, ws: make(chan struct{}, c.Runtime.MaxRuns*2), verify: make(chan struct{}, 2), wsClose: map[*websocket.Conn]func(){}, geo: networkinfo.Open(c.Runtime.GeoCity, c.Runtime.GeoASN), static: webui.Handler(), logger: logger}
 	if c.Runtime.OIDCIssuer != "" {
+		logger.Info("OIDC discovery started", "event", "oidc_discovery_started")
 		ctx, cancel := context.WithTimeout(context.Background(), oidcDiscoveryTimeout)
 		defer cancel()
 		var err error
 		a.oidc, err = auth.NewOIDC(ctx, c.Runtime.OIDCIssuer, c.Runtime.OIDCClientID, c.Runtime.OIDCClientSecret, c.Runtime.OIDCRedirect, c.Runtime.OIDCEmails, c.Runtime.SessionKeys)
 		if err != nil {
+			logger.Error("OIDC discovery failed", "event", "oidc_discovery_failed", "reason", "provider_discovery")
 			a.geo.Close()
 			return nil, fmt.Errorf("OIDC discovery: %w", err)
 		}
+		logger.Info("OIDC discovery completed", "event", "oidc_discovery_completed")
 	}
 	return a, nil
 }
@@ -154,6 +166,7 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		a.sessions.Clear(w)
+		a.logger.Info("logout completed", "event", "auth_logout")
 		w.WriteHeader(204)
 	case r.URL.Path == "/api/auth/oidc/begin" && r.Method == "GET":
 		a.beginOIDC(w, r)
@@ -249,6 +262,7 @@ func (a *App) allowLogin(ip string) bool {
 func (a *App) loginPassword(w http.ResponseWriter, r *http.Request) {
 	ip := networkinfo.ClientIP(r, a.cfg.Trusted).String()
 	if !a.allowLogin(ip) {
+		a.logger.Warn("password login denied", "event", "auth_login_denied", "method", "password", "reason", "rate_limited")
 		time.Sleep(150 * time.Millisecond)
 		http.Error(w, "invalid credentials", 401)
 		return
@@ -258,6 +272,7 @@ func (a *App) loginPassword(w http.ResponseWriter, r *http.Request) {
 	case a.verify <- struct{}{}:
 		defer func() { <-a.verify }()
 	default:
+		a.logger.Warn("password login denied", "event", "auth_login_denied", "method", "password", "reason", "verifier_busy")
 		http.Error(w, "login busy", http.StatusTooManyRequests)
 		return
 	}
@@ -265,11 +280,17 @@ func (a *App) loginPassword(w http.ResponseWriter, r *http.Request) {
 		Password string `json:"password"`
 	}
 	if json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&q) != nil || !auth.Verify(a.cfg.PasswordHash, []byte(q.Password)) {
+		a.logger.Warn("password login denied", "event", "auth_login_denied", "method", "password", "reason", "invalid_credentials")
 		time.Sleep(150 * time.Millisecond)
 		http.Error(w, "invalid credentials", 401)
 		return
 	}
-	a.sessions.Set(w, auth.Claims{Subject: "password", Method: "password"})
+	if e := a.sessions.Set(w, auth.Claims{Subject: "password", Method: "password"}); e != nil {
+		a.logger.Error("session creation failed", "event", "auth_session_failed", "method", "password", "reason", "session_encode")
+		http.Error(w, "login unavailable", http.StatusInternalServerError)
+		return
+	}
+	a.logger.Info("login completed", "event", "auth_login_succeeded", "method", "password")
 	w.WriteHeader(204)
 }
 func (a *App) beginOIDC(w http.ResponseWriter, r *http.Request) {
@@ -279,9 +300,11 @@ func (a *App) beginOIDC(w http.ResponseWriter, r *http.Request) {
 	}
 	u, e := a.oidc.Begin(w, r)
 	if e != nil {
+		a.logger.Error("OIDC login unavailable", "event", "oidc_begin_failed", "reason", "state_encode")
 		http.Error(w, "login unavailable", 503)
 		return
 	}
+	a.logger.Info("OIDC login started", "event", "oidc_begin_succeeded")
 	http.Redirect(w, r, u, http.StatusFound)
 }
 func (a *App) callbackOIDC(w http.ResponseWriter, r *http.Request) {
@@ -291,10 +314,16 @@ func (a *App) callbackOIDC(w http.ResponseWriter, r *http.Request) {
 	}
 	sub, e := a.oidc.Callback(w, r)
 	if e != nil {
+		a.logger.Warn("OIDC login denied", "event", "auth_login_denied", "method", "oidc", "reason", auth.OIDCFailureReason(e))
 		http.Error(w, "login denied", 401)
 		return
 	}
-	a.sessions.Set(w, auth.Claims{Subject: sub, Method: "oidc"})
+	if e := a.sessions.Set(w, auth.Claims{Subject: sub, Method: "oidc"}); e != nil {
+		a.logger.Error("session creation failed", "event", "auth_session_failed", "method", "oidc", "reason", "session_encode")
+		http.Error(w, "login unavailable", http.StatusInternalServerError)
+		return
+	}
+	a.logger.Info("login completed", "event", "auth_login_succeeded", "method", "oidc")
 	http.Redirect(w, r, "/", http.StatusFound)
 }
 func (a *App) create(w http.ResponseWriter, r *http.Request) {

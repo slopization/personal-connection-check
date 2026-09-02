@@ -85,11 +85,13 @@ func (s *Sessions) Decode(v string) (Claims, error) {
 	}
 	return Claims{}, errors.New("invalid session")
 }
-func (s *Sessions) Set(w http.ResponseWriter, c Claims) {
+func (s *Sessions) Set(w http.ResponseWriter, c Claims) error {
 	v, e := s.Encode(c)
-	if e == nil {
-		http.SetCookie(w, &http.Cookie{Name: "pcc_session", Value: v, Path: "/", HttpOnly: true, Secure: s.secure, SameSite: http.SameSiteLaxMode, MaxAge: 8 * 3600})
+	if e != nil {
+		return e
 	}
+	http.SetCookie(w, &http.Cookie{Name: "pcc_session", Value: v, Path: "/", HttpOnly: true, Secure: s.secure, SameSite: http.SameSiteLaxMode, MaxAge: 8 * 3600})
+	return nil
 }
 func (s *Sessions) Clear(w http.ResponseWriter) {
 	http.SetCookie(w, &http.Cookie{Name: "pcc_session", Value: "", Path: "/", HttpOnly: true, Secure: s.secure, SameSite: http.SameSiteLaxMode, MaxAge: -1})

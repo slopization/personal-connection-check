@@ -5,13 +5,29 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
-	"fmt"
+	"errors"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
 	"net/http"
 	"strings"
 	"time"
 )
+
+type oidcFailure struct{ reason string }
+
+func (e *oidcFailure) Error() string { return "OIDC login denied" }
+
+func oidcFailed(reason string) error { return &oidcFailure{reason: reason} }
+
+// OIDCFailureReason returns a bounded, credential-free reason suitable for
+// operational logs. It never returns provider response bodies or token data.
+func OIDCFailureReason(err error) string {
+	var failure *oidcFailure
+	if errors.As(err, &failure) {
+		return failure.reason
+	}
+	return "unknown"
+}
 
 type OIDC struct {
 	Issuer, ClientID, ClientSecret, Redirect string
@@ -60,23 +76,23 @@ func (o *OIDC) Callback(w http.ResponseWriter, r *http.Request) (string, error) 
 	}()
 	c, e := r.Cookie("pcc_oidc")
 	if e != nil {
-		return "", fmt.Errorf("invalid login")
+		return "", oidcFailed("state")
 	}
 	st, e := o.states.Decode(c.Value)
 	if e != nil || r.URL.Query().Get("state") == "" || r.URL.Query().Get("state") != st.Subject {
-		return "", fmt.Errorf("invalid login")
+		return "", oidcFailed("state")
 	}
 	tok, e := o.oauth.Exchange(r.Context(), r.URL.Query().Get("code"), oauth2.SetAuthURLParam("code_verifier", st.Method))
 	if e != nil {
-		return "", fmt.Errorf("login failed")
+		return "", oidcFailed("token_exchange")
 	}
 	raw, ok := tok.Extra("id_token").(string)
 	if !ok {
-		return "", fmt.Errorf("login failed")
+		return "", oidcFailed("id_token_missing")
 	}
 	id, e := o.verifier.Verify(r.Context(), raw)
 	if e != nil {
-		return "", fmt.Errorf("login denied")
+		return "", oidcFailed("id_token_verification")
 	}
 	var cl struct {
 		Email           string `json:"email"`
@@ -84,15 +100,21 @@ func (o *OIDC) Callback(w http.ResponseWriter, r *http.Request) (string, error) 
 		Nonce           string `json:"nonce"`
 		AuthorizedParty string `json:"azp"`
 	}
-	if e = id.Claims(&cl); e != nil || cl.Nonce != st.SessionID || !cl.EmailVerified {
-		return "", fmt.Errorf("login denied")
+	if e = id.Claims(&cl); e != nil {
+		return "", oidcFailed("claims")
+	}
+	if cl.Nonce != st.SessionID {
+		return "", oidcFailed("nonce")
+	}
+	if !cl.EmailVerified {
+		return "", oidcFailed("email_unverified")
 	}
 	email := strings.ToLower(strings.TrimSpace(cl.Email))
 	if email == "" || !o.Emails[email] {
-		return "", fmt.Errorf("login denied")
+		return "", oidcFailed("email_not_allowed")
 	}
 	if cl.AuthorizedParty != "" && cl.AuthorizedParty != o.ClientID {
-		return "", fmt.Errorf("login denied")
+		return "", oidcFailed("authorized_party")
 	}
 	return email, nil
 }
