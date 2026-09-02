@@ -6,6 +6,7 @@ type Fetcher = (
 ) => Promise<Response>;
 const CHUNK = 1024 * 1024;
 const PHASE_MS = 1250;
+const DOWNLOAD_TIMEOUT_MS = PHASE_MS + 500;
 const MAX_UPLOAD_REQUESTS = 8;
 const mbps = (bytes: number, elapsed: number) =>
   elapsed > 0 ? (bytes * 8 * 1000) / elapsed / 1_000_000 : 0;
@@ -19,12 +20,12 @@ export function createBrowserTransport(
   const url = (path: string) => `/api/test-runs/${runID}/${path}`;
   async function downloadWorker(parent: AbortSignal): Promise<Phase> {
     const ctl = new AbortController();
-    const timeout = window.setTimeout(() => ctl.abort(), 1250);
+    const timeout = window.setTimeout(() => ctl.abort(), DOWNLOAD_TIMEOUT_MS);
     parent.addEventListener("abort", () => ctl.abort(), { once: true });
     const signal = ctl.signal;
     const started = now();
     const response = await fetcher(
-      `${url("download")}?nonce=${crypto.randomUUID()}`,
+      `${url("download")}?nonce=${crypto.randomUUID()}&durationMs=${PHASE_MS}`,
       { signal, cache: "no-store" },
     );
     if (!response.ok || !response.body) throw new Error("download failed");

@@ -13,6 +13,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -263,7 +264,20 @@ func (a *App) download(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer x.Release()
-	deadline := x.Expires
+	phase := 1250 * time.Millisecond
+	if raw := r.URL.Query().Get("durationMs"); raw != "" {
+		milliseconds, err := strconv.Atoi(raw)
+		if err != nil || milliseconds < 1 || milliseconds > 1250 {
+			http.Error(w, "invalid duration", http.StatusBadRequest)
+			return
+		}
+		phase = time.Duration(milliseconds) * time.Millisecond
+	}
+	phaseEnd := time.Now().Add(phase)
+	deadline := phaseEnd.Add(250 * time.Millisecond)
+	if x.Expires.Before(deadline) {
+		deadline = x.Expires
+	}
 	rc := http.NewResponseController(w)
 	_ = rc.SetWriteDeadline(deadline)
 	defer rc.SetWriteDeadline(time.Time{})
@@ -272,7 +286,7 @@ func (a *App) download(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store, no-transform")
 	w.Header().Set("X-Accel-Buffering", "no")
 	b := make([]byte, 64<<10)
-	for {
+	for time.Now().Before(phaseEnd) {
 		select {
 		case <-x.Context().Done():
 			return
