@@ -1,0 +1,29 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: exact SHA detached checkout
+        run: |
+          set -euo pipefail
+          git init .
+          git remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
+          git fetch --depth=1 origin "$GITHUB_SHA"
+          git checkout --detach "$GITHUB_SHA"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+      - name: provision pinned Go
+        run: |
+          set -euo pipefail
+          curl -fsSLo go.tgz https://go.dev/dl/go1.27.1.linux-amd64.tar.gz
+          echo '63d339f0da5ab53635a56f2490a7984dfe12dfcff22ad749f63edaf590168445  go.tgz' | sha256sum -c -
+          sudo tar -C /usr/local -xzf go.tgz
+      - name: provision pinned Node
+        run: |
+          set -euo pipefail
+          curl -fsSLO https://nodejs.org/dist/v26.0.0/node-v26.0.0-linux-x64.tar.xz
+          echo '345d558514c62622b5c7d1f7b5f2a19c31ab1405d217df49f010c5ea8decc0f4  node-v26.0.0-linux-x64.tar.xz' | sha256sum -c -
+          sudo tar -C /usr/local --strip-components=1 -xf node-v26.0.0-linux-x64.tar.xz
+      - run: cd web && npm ci
+      - run: make e2e-install
+      - run: make release-gate

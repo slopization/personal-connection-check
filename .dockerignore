@@ -1,0 +1,7 @@
+.git/
+.hermes/
+.tools/
+web/node_modules/
+web/dist/
+internal/webui/dist/
+.gitignore

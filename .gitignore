@@ -1,0 +1,14 @@
+.hermes/
+.tools/
+web/node_modules/
+web/dist/
+internal/webui/dist/
+web/*.tsbuildinfo
+web/test-results/
+web/playwright-report/
+.playwright-browsers/
+pcc
+*.mmdb
+.env
+!cmd/
+!cmd/**

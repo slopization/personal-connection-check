@@ -1,0 +1,57 @@
+:root {
+  font-family: system-ui, sans-serif;
+  color: #e8eefb;
+  background: #101827;
+}
+body {
+  margin: 0;
+}
+main {
+  max-width: 900px;
+  margin: auto;
+  padding: 16px;
+}
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  border-bottom: 1px solid #39455d;
+}
+button,
+input {
+  min-height: 44px;
+  margin: 4px;
+  padding: 8px;
+  border-radius: 6px;
+}
+button {
+  background: #2563eb;
+  color: white;
+  border: 0;
+}
+section {
+  padding: 24px;
+  background: #182237;
+  margin-top: 18px;
+  border-radius: 8px;
+}
+label {
+  display: grid;
+  gap: 6px;
+  max-width: 360px;
+}
+output {
+  display: block;
+  margin-top: 20px;
+  font-size: 1.3rem;
+}
+@media (max-width: 600px) {
+  header {
+    display: block;
+  }
+  nav {
+    display: flex;
+    flex-wrap: wrap;
+  }
+}

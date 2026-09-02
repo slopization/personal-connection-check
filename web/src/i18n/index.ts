@@ -1,0 +1,108 @@
+export type Language = "ko" | "en";
+export type Copy = {
+  title: string;
+  speed: string;
+  stability: string;
+  history: string;
+  start: string;
+  cancel: string;
+  password: string;
+  login: string;
+  loginFailed: string;
+  pinging: string;
+  downloading: string;
+  uploading: string;
+  measurementFailed: string;
+  deleteAll: string;
+  deleteConfirm: string;
+  png: string;
+  network: string;
+  unsupported: string;
+  paused: string;
+  methodology: string;
+  chartAria: string;
+  chartRtt: string;
+  noSamples: string;
+  jitter: string;
+  range10m: string;
+  range1h: string;
+  rangeAll: string;
+  mbps: (value: number | string) => string;
+  milliseconds: (value: number | string) => string;
+  saveData: (enabled: boolean) => string;
+  speedResult: (download: number, upload: number) => string;
+};
+export const language = (
+  v = typeof navigator === "undefined" ? "en" : navigator.language,
+): Language => (v.toLowerCase().startsWith("ko") ? "ko" : "en");
+export const text: Record<Language, Copy> = {
+  en: {
+    title: "Personal Connection Check",
+    speed: "Speed test",
+    stability: "Stability",
+    history: "History",
+    start: "Start test",
+    cancel: "Cancel",
+    password: "Shared password",
+    login: "Sign in",
+    loginFailed: "Sign-in failed",
+    pinging: "Measuring ping…",
+    downloading: "Downloading…",
+    uploading: "Uploading…",
+    measurementFailed: "Measurement failed",
+    deleteAll: "Delete all",
+    deleteConfirm: "Delete all local measurement history?",
+    png: "Download PNG",
+    network: "Network information",
+    unsupported: "Not provided by this browser",
+    paused: "Measurement paused",
+    methodology:
+      "Measured to this server; results include the operational path.",
+    chartAria: "Stability chart",
+    chartRtt: "RTT",
+    noSamples: "No samples",
+    jitter: "jitter",
+    range10m: "10m",
+    range1h: "1h",
+    rangeAll: "all",
+    mbps: (value) => `${value} Mbps`,
+    milliseconds: (value) => `${value} ms`,
+    saveData: (enabled) => `saveData ${enabled}`,
+    speedResult: (download, upload) =>
+      `${download.toFixed(1)} Mbps / ${upload.toFixed(1)} Mbps`,
+  },
+  ko: {
+    title: "개인 연결 점검",
+    speed: "속도 측정",
+    stability: "안정성",
+    history: "이력",
+    start: "측정 시작",
+    cancel: "취소",
+    password: "공유 비밀번호",
+    login: "로그인",
+    loginFailed: "로그인에 실패했습니다",
+    pinging: "핑 측정 중…",
+    downloading: "다운로드 중…",
+    uploading: "업로드 중…",
+    measurementFailed: "측정에 실패했습니다",
+    deleteAll: "전체 삭제",
+    deleteConfirm: "모든 로컬 측정 이력을 삭제할까요?",
+    png: "PNG 저장",
+    network: "네트워크 정보",
+    unsupported: "브라우저에서 제공하지 않음",
+    paused: "측정 일시정지",
+    methodology: "이 서버까지의 운영 경로를 측정한 결과입니다.",
+    chartAria: "안정성 차트",
+    chartRtt: "왕복 시간",
+    noSamples: "샘플 없음",
+    jitter: "지터",
+    range10m: "10분",
+    range1h: "1시간",
+    rangeAll: "전체",
+    mbps: (value) => `${value} Mbps`,
+    milliseconds: (value) => `${value} ms`,
+    saveData: (enabled) => `데이터 절약 ${enabled ? "사용" : "사용 안 함"}`,
+    speedResult: (download, upload) =>
+      `${download.toFixed(1)} Mbps / ${upload.toFixed(1)} Mbps`,
+  },
+};

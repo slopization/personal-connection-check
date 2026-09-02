@@ -1,0 +1,53 @@
+name: container
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    outputs:
+      image_digest: ${{ steps.publish.outputs.image_digest }}
+    steps:
+      - name: exact SHA detached checkout
+        run: |
+          set -euo pipefail
+          git init .
+          git remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
+          git fetch --depth=1 origin "$GITHUB_SHA"
+          git checkout --detach "$GITHUB_SHA"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+      - name: build and smoke
+        env:
+          IMAGE: git.kyu.sh/modelgarden/personal-connection-check
+        run: |
+          set -euo pipefail
+          docker build --label org.opencontainers.image.source=https://git.kyu.sh/modelgarden/personal-connection-check --label org.opencontainers.image.revision="$GITHUB_SHA" --label org.opencontainers.image.licenses=MIT -t "$IMAGE:sha-${GITHUB_SHA:0:12}" .
+          docker run --rm --read-only --tmpfs /tmp:rw,noexec,nosuid,size=16m "$IMAGE:sha-${GITHUB_SHA:0:12}" healthcheck
+      - id: publish
+        name: publish immutable and release tags
+        if: github.event_name == 'push'
+        env:
+          PACKAGE_TOKEN: ${{ secrets.PACKAGE_TOKEN }}
+          IMAGE: git.kyu.sh/modelgarden/personal-connection-check
+        run: |
+          set -euo pipefail
+          echo "$PACKAGE_TOKEN" | docker login git.kyu.sh -u "$GITHUB_ACTOR" --password-stdin
+          docker push "$IMAGE:sha-${GITHUB_SHA:0:12}"
+          if [ "$GITHUB_REF" = "refs/heads/main" ]; then
+            docker tag "$IMAGE:sha-${GITHUB_SHA:0:12}" "$IMAGE:latest"
+            docker push "$IMAGE:latest"
+          fi
+          if echo "$GITHUB_REF" | grep -Eq '^refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            tag="${GITHUB_REF#refs/tags/}"
+            docker tag "$IMAGE:sha-${GITHUB_SHA:0:12}" "$IMAGE:$tag"
+            docker push "$IMAGE:$tag"
+          fi
+          docker pull "$IMAGE:sha-${GITHUB_SHA:0:12}"
+          digest="$(docker inspect --format='{{join .RepoDigests "\n"}}' "$IMAGE:sha-${GITHUB_SHA:0:12}" | awk '/@sha256:/ {print; exit}')"
+          test -n "$digest"
+          case "$digest" in *"@sha256:"*) ;; *) exit 1 ;; esac
+          printf '%s\n' "$digest" | tee image-digest.txt
+          test -s image-digest.txt
+          printf 'IMAGE_DIGEST=%s\n' "$digest"
+          printf 'image_digest=%s\n' "$digest" >> "$GITHUB_OUTPUT"
