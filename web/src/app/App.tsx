@@ -20,6 +20,7 @@ import {
 } from "../features/stability/StabilityChart";
 const t = text[language()];
 type Info = { ip: string; city?: string; isp?: string; country?: string };
+type AuthConfig = { footerMessage?: string };
 type Net = {
   type?: string;
   effectiveType?: string;
@@ -116,6 +117,18 @@ export function warnIncompleteDownload(
   });
   return true;
 }
+export function FooterMessage({ message }: { message: string }) {
+  if (!message) return null;
+  return (
+    <footer class="admin-message">
+      {message
+        .split(/(https?:\/\/[^\s<]+)/g)
+        .map((part) =>
+          /^https?:\/\//.test(part) ? <a href={part}>{part}</a> : part,
+        )}
+    </footer>
+  );
+}
 export function IncompleteDownloadWarning({ count }: { count: number }) {
   if (count < 1) return null;
   return (
@@ -138,6 +151,7 @@ export function App() {
   const [pauses, setPauses] = useState<number[]>([]);
   const [monitoring, setMonitoring] = useState(false);
   const [chartRange, setChartRange] = useState<ChartRange>("10m");
+  const [footerMessage, setFooterMessage] = useState("");
   const runCtl = useRef<AbortController>();
   const monitor = useRef<StabilityMonitor>();
   const network = (navigator as Navigator & { connection?: Net }).connection;
@@ -157,6 +171,19 @@ export function App() {
   }
   useEffect(() => {
     void hydrateStability();
+  }, []);
+  useEffect(() => {
+    let active = true;
+    void fetch("/api/auth/config")
+      .then((response) => response.json() as Promise<AuthConfig>)
+      .then((config) => {
+        if (active && typeof config.footerMessage === "string")
+          setFooterMessage(config.footerMessage);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
   }, []);
   async function login() {
     try {
@@ -269,6 +296,7 @@ export function App() {
         </label>
         <button onClick={login}>{t.login}</button>
         <p role="alert">{status}</p>
+        <FooterMessage message={footerMessage} />
       </main>
     );
   return (
@@ -393,6 +421,7 @@ export function App() {
           </ul>
         </section>
       )}
+      <FooterMessage message={footerMessage} />
     </main>
   );
 }

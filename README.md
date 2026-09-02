@@ -53,6 +53,7 @@ docker run --rm --read-only --tmpfs /tmp:rw,noexec,nosuid,size=16m \
 
 ## Configuration
 
+<!-- prettier-ignore -->
 | Variable | Purpose |
 | --- | --- |
 | `PCC_PUBLIC_ORIGIN` | Exact external origin used for Host, CSRF, and WebSocket origin checks |
@@ -71,6 +72,7 @@ docker run --rm --read-only --tmpfs /tmp:rw,noexec,nosuid,size=16m \
 | `PCC_UPLOAD_LIMIT` | Maximum bytes accepted by one upload request |
 | `PCC_GEOIP_CITY_DB` | Optional local GeoIP City MMDB path |
 | `PCC_GEOIP_ASN_DB` | Optional local GeoIP ASN MMDB path |
+| `PCC_FOOTER_MESSAGE` | Optional public plain-text footer; HTTP(S) URLs become links |
 | `PCC_HEALTHCHECK_URL` | Optional URL used by the image healthcheck; default `http://127.0.0.1:8080/healthz` |
 
 At least one complete authentication method is required. OIDC startup fails closed when discovery or required configuration is invalid. Allowed OIDC emails must have `email_verified=true`.
@@ -102,7 +104,7 @@ make e2e-install
 make release-gate
 ```
 
-See `docs/k3s-deployment.md`, `docs/measurement-methodology.md`, `docs/security.md`, and `docs/tdd-evidence.md` for deployment, measurement semantics, security boundaries, and RED/GREEN evidence.
+See `docs/k3s-deployment.md`, `docs/dbip.md`, `docs/measurement-methodology.md`, `docs/security.md`, and `docs/tdd-evidence.md` for deployment, optional DB-IP data, measurement semantics, security boundaries, and RED/GREEN evidence.
 
 ## License
 

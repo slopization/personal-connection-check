@@ -78,6 +78,70 @@ describe("stability restoration and Korean UI", () => {
     expect(host.textContent).not.toContain("No samples");
   });
 
+  it("shows the configured footer message before and after login", async () => {
+    vi.resetModules();
+    Object.defineProperty(navigator, "language", {
+      configurable: true,
+      value: "ko-KR",
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === "/api/auth/config") {
+          return new Response(
+            JSON.stringify({
+              password: true,
+              oidc: false,
+              footerMessage: "IP Geolocation by DB-IP: https://db-ip.com/",
+            }),
+          );
+        }
+        if (url === "/api/network-info") {
+          return new Response(JSON.stringify({ ip: "127.0.0.1" }));
+        }
+        return new Response(null, { status: 204 });
+      }),
+    );
+    const { App } = await import("./App");
+    const host = document.createElement("div");
+    document.body.append(host);
+    render(h(App, {}), host);
+
+    await vi.waitFor(() =>
+      expect(host.querySelector("footer")?.textContent).toContain(
+        "IP Geolocation by DB-IP",
+      ),
+    );
+    expect(host.querySelector<HTMLAnchorElement>("footer a")?.href).toBe(
+      "https://db-ip.com/",
+    );
+
+    (host.querySelector("button") as HTMLButtonElement).click();
+    await flush();
+    expect(host.querySelector("footer")?.textContent).toContain(
+      "IP Geolocation by DB-IP",
+    );
+  });
+
+  it("renders footer URLs as links without interpreting HTML", async () => {
+    const { FooterMessage } = await import("./App");
+    const host = document.createElement("div");
+    document.body.append(host);
+
+    render(
+      h(FooterMessage, {
+        message:
+          "IP Geolocation by DB-IP: https://db-ip.com/ <script>alert(1)</script>",
+      }),
+      host,
+    );
+
+    expect(host.querySelector("a")?.href).toBe("https://db-ip.com/");
+    expect(host.querySelector("script")).toBeNull();
+    expect(host.textContent).toContain("<script>alert(1)</script>");
+  });
+
   it("renders an explicit partial-stream accuracy warning", async () => {
     const { IncompleteDownloadWarning } = await import("./App");
     const host = document.createElement("div");

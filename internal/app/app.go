@@ -160,7 +160,11 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case r.URL.Path == "/api/auth/oidc/callback" && r.Method == "GET":
 		a.callbackOIDC(w, r)
 	case r.URL.Path == "/api/auth/config":
-		json.NewEncoder(w).Encode(map[string]bool{"password": a.cfg.PasswordHash != "", "oidc": a.oidc != nil})
+		json.NewEncoder(w).Encode(struct {
+			Password      bool   `json:"password"`
+			OIDC          bool   `json:"oidc"`
+			FooterMessage string `json:"footerMessage"`
+		}{a.cfg.PasswordHash != "", a.oidc != nil, a.cfg.FooterMessage})
 	case r.URL.Path == "/api/network-info":
 		a.protected(w, r, a.info)
 	case r.URL.Path == "/api/test-runs" && r.Method == "POST":

@@ -21,4 +21,10 @@
 | Unsupported Safari/WebKit warning      | The updated browser and render tests first failed because only desktop Safari was detected and mobile Safari rendered no warning.                                                                                              | Focused tests pass with a non-blocking Korean/English warning for desktop/mobile Safari, iPadOS desktop mode, and iOS WebKit browsers; measurement remains enabled while Blink and Gecko remain supported.                                                                 |
 | Partial WebKit download snapshots      | Protocol tests showed that dropping a `reader.read()` that never settles discarded its bytes and accuracy status; a worker failure also left sibling workers active; the UI/console diagnostic helper did not exist.                              | Worker progress is frozen at a bounded aggregate deadline, partial bytes and a final Mbps sample are retained, error paths abort siblings, incomplete stream instances propagate to results, and Korean/English UI plus `console.warn` disclose conservative accuracy. |
 
+## Public footer message (2026-09-03)
+
+- RED: `go test ./internal/config -run TestLoadReadsFooterMessage -count=1` failed because `Config.FooterMessage` did not exist. GREEN: the same test passed after loading `PCC_FOOTER_MESSAGE`.
+- RED: `go test ./internal/app -run TestAuthConfigPublishesFooterMessage -count=1` returned an empty message. GREEN: the same test passed after extending the public auth config response.
+- RED: the focused render test found no footer or attribution link. GREEN: it passed with plain-text rendering, safe HTTP(S) linkification, and the configured message visible before and after login.
+
 External validation is required for each revision because local Playwright binaries and a Docker daemon are unavailable. Forgejo CI provides multi-engine E2E, container smoke, registry push/pull, and digest evidence.

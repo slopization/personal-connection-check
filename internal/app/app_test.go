@@ -5,6 +5,7 @@ import (
 	"codeberg.org/modelgarden/personal-connection-check/internal/auth"
 	"codeberg.org/modelgarden/personal-connection-check/internal/config"
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -49,6 +50,27 @@ func TestHealthz(t *testing.T) {
 	a.ServeHTTP(w, r)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d", w.Code)
+	}
+}
+
+func TestAuthConfigPublishesFooterMessage(t *testing.T) {
+	a, err := New(Config{Runtime: config.Config{FooterMessage: "IP Geolocation by DB-IP: https://db-ip.com/"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+
+	r := httptest.NewRequest(http.MethodGet, "/api/auth/config", nil)
+	w := httptest.NewRecorder()
+	a.ServeHTTP(w, r)
+	var got struct {
+		FooterMessage string `json:"footerMessage"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got.FooterMessage != "IP Geolocation by DB-IP: https://db-ip.com/" {
+		t.Fatalf("footerMessage = %q", got.FooterMessage)
 	}
 }
 

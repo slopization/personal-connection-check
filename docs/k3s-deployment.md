@@ -178,4 +178,6 @@ curl -fsS https://connection.example.com/healthz
 
 Open the HTTPS URL on the phone, sign in, and start a measurement. If the health check works but measurement fails, verify that no upstream proxy buffers or compresses responses and that its request timeout exceeds 25 seconds.
 
+For optional offline city and ASN data, including a read-only k3s mount and the required attribution, see [`dbip.md`](dbip.md).
+
 To update, change the immutable image tag and run `kubectl apply -f pcc.yaml`; to remove everything, run `kubectl delete namespace pcc`.

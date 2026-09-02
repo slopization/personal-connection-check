@@ -21,12 +21,12 @@ type Config struct {
 	MaxRuns, MaxStreams                                      int
 	MaxDuration                                              time.Duration
 	UploadLimit                                              int64
-	GeoCity, GeoASN, Listen, PublicOrigin                    string
+	GeoCity, GeoASN, Listen, PublicOrigin, FooterMessage     string
 	SessionCookieSecure                                      bool
 }
 
 func Load() (Config, error) {
-	c := Config{PasswordHash: os.Getenv("PCC_SHARED_PASSWORD_HASH"), OIDCIssuer: os.Getenv("PCC_OIDC_ISSUER"), OIDCClientID: os.Getenv("PCC_OIDC_CLIENT_ID"), OIDCClientSecret: os.Getenv("PCC_OIDC_CLIENT_SECRET"), OIDCRedirect: os.Getenv("PCC_OIDC_REDIRECT_URI"), PublicOrigin: strings.TrimSuffix(os.Getenv("PCC_PUBLIC_ORIGIN"), "/"), MaxRuns: integer("PCC_MAX_RUNS", 2), MaxStreams: integer("PCC_MAX_STREAMS", 8), MaxDuration: duration("PCC_MAX_DIRECTION_DURATION", 15*time.Second), UploadLimit: int64(integer("PCC_UPLOAD_LIMIT", 16<<20)), GeoCity: os.Getenv("PCC_GEOIP_CITY_DB"), GeoASN: os.Getenv("PCC_GEOIP_ASN_DB"), Listen: env("PCC_LISTEN", ":8080")}
+	c := Config{PasswordHash: os.Getenv("PCC_SHARED_PASSWORD_HASH"), OIDCIssuer: os.Getenv("PCC_OIDC_ISSUER"), OIDCClientID: os.Getenv("PCC_OIDC_CLIENT_ID"), OIDCClientSecret: os.Getenv("PCC_OIDC_CLIENT_SECRET"), OIDCRedirect: os.Getenv("PCC_OIDC_REDIRECT_URI"), PublicOrigin: strings.TrimSuffix(os.Getenv("PCC_PUBLIC_ORIGIN"), "/"), MaxRuns: integer("PCC_MAX_RUNS", 2), MaxStreams: integer("PCC_MAX_STREAMS", 8), MaxDuration: duration("PCC_MAX_DIRECTION_DURATION", 15*time.Second), UploadLimit: int64(integer("PCC_UPLOAD_LIMIT", 16<<20)), GeoCity: os.Getenv("PCC_GEOIP_CITY_DB"), GeoASN: os.Getenv("PCC_GEOIP_ASN_DB"), Listen: env("PCC_LISTEN", ":8080"), FooterMessage: os.Getenv("PCC_FOOTER_MESSAGE")}
 	if c.PasswordHash == "" && c.OIDCIssuer == "" {
 		return c, fmt.Errorf("authentication is required")
 	}

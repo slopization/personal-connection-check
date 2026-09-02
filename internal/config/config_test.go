@@ -49,3 +49,18 @@ func TestLoadRejectsSessionKeysThatAESCannotUse(t *testing.T) {
 		t.Fatalf("Load() error = %v, want unusable AES key rejection", err)
 	}
 }
+
+func TestLoadReadsFooterMessage(t *testing.T) {
+	t.Setenv("PCC_SHARED_PASSWORD_HASH", "$argon2id$v=19$m=8192,t=1,p=1$MDEyMzQ1Njc4OWFiY2RlZg$MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY")
+	t.Setenv("PCC_SESSION_KEYS", base64.RawURLEncoding.EncodeToString(make([]byte, 32)))
+	t.Setenv("PCC_PUBLIC_ORIGIN", "https://connection.example.com")
+	t.Setenv("PCC_FOOTER_MESSAGE", "IP Geolocation by DB-IP: https://db-ip.com/")
+
+	c, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := c.FooterMessage, "IP Geolocation by DB-IP: https://db-ip.com/"; got != want {
+		t.Fatalf("FooterMessage = %q, want %q", got, want)
+	}
+}
