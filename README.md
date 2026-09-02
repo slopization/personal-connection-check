@@ -5,7 +5,7 @@
 
 An access-controlled, single-server web application for measuring the browser-to-server network path.
 
-- Adaptive parallel download and upload measurement
+- Adaptive parallel download and upload measurement with a live throughput chart and HTTP ping
 - WebSocket application RTT and jitter monitoring
 - 10-minute, 1-hour, and whole-session charts
 - Shared-password or standards-based OIDC authentication
@@ -13,7 +13,7 @@ An access-controlled, single-server web application for measuring the browser-to
 - Korean UI for `ko` browsers; English fallback
 - Optional local GeoIP City/ASN databases
 
-> This measures the browser → ingress → application path. RTT is WebSocket round-trip time, not ICMP ping. A speed test intentionally consumes substantial bandwidth and starts only after explicit user action.
+> This measures the browser → ingress → application path. The speed test reports HTTP application RTT; the stability tab reports WebSocket application RTT. Neither is ICMP ping. A speed test intentionally consumes substantial bandwidth and starts only after explicit user action.
 
 ## Quick start
 
@@ -61,7 +61,7 @@ docker run --rm --read-only --tmpfs /tmp:rw,noexec,nosuid,size=16m \
 | `PCC_OIDC_ISSUER`            | With OIDC              | `https://idp.example.com/oidc`         | OIDC discovery issuer                                                                                |
 | `PCC_OIDC_CLIENT_ID`         | With OIDC              | `pcc`                                  | OIDC client ID                                                                                       |
 | `PCC_OIDC_CLIENT_SECRET`     | With OIDC              | `<OIDC client secret>`                 | OIDC client secret                                                                                   |
-| `PCC_OIDC_EMAIL_ALLOWLIST`   | With OIDC              | `alice@example.com,bob@example.com`    | Comma-separated allowed ID token email addresses                                                      |
+| `PCC_OIDC_EMAIL_ALLOWLIST`   | With OIDC              | `alice@example.com,bob@example.com`    | Comma-separated allowed ID token email addresses                                                     |
 | `PCC_LISTEN`                 | No                     | `:8080`                                | Listen address; default `:8080`                                                                      |
 | `PCC_TRUSTED_PROXY_CIDRS`    | No                     | `192.0.2.10/32`                        | Comma-separated actual ingress proxy networks; default trusts none                                   |
 | `PCC_MAX_RUNS`               | No                     | `2`                                    | Maximum concurrent test runs; default `2`                                                            |

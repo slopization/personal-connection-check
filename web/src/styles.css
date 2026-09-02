@@ -65,6 +65,78 @@ output {
   margin-top: 20px;
   font-size: 1.3rem;
 }
+.live-measurement {
+  margin: 18px 0;
+}
+.live-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.live-metrics > div {
+  display: grid;
+  gap: 2px;
+  padding: 14px;
+  background: #101827;
+  border: 1px solid #39455d;
+  border-radius: 10px;
+}
+.live-metrics span,
+.live-metrics small {
+  color: #b8c4d9;
+}
+.live-metrics strong {
+  font-size: clamp(2rem, 8vw, 4rem);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.speed-chart {
+  margin: 14px 0 0;
+  padding: 10px;
+  background: #101827;
+  border: 1px solid #39455d;
+  border-radius: 10px;
+}
+.speed-chart svg {
+  display: block;
+  width: 100%;
+  min-height: 180px;
+}
+.chart-axis {
+  stroke: #52617c;
+  stroke-width: 1;
+}
+.chart-scale {
+  fill: #b8c4d9;
+  font-size: 14px;
+}
+.speed-line {
+  fill: none;
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.speed-line.download {
+  stroke: #38bdf8;
+}
+.speed-line.upload {
+  stroke: #a78bfa;
+}
+.speed-chart figcaption {
+  display: flex;
+  gap: 18px;
+}
+.legend-download {
+  color: #38bdf8;
+}
+.legend-upload {
+  color: #a78bfa;
+}
+.speed-chart-empty {
+  padding: 32px;
+  color: #b8c4d9;
+  text-align: center;
+}
 @media (max-width: 600px) {
   header {
     display: block;
@@ -72,5 +144,8 @@ output {
   nav {
     display: flex;
     flex-wrap: wrap;
+  }
+  .live-metrics {
+    grid-template-columns: 1fr 1fr;
   }
 }

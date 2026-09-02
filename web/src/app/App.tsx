@@ -11,7 +11,11 @@ import {
 } from "../storage/database";
 import { exportPNG } from "../features/speed/exportImage";
 import { runAdaptive } from "../features/speed/engine";
-import { createBrowserTransport } from "../features/speed/protocol";
+import { SpeedChart } from "../features/speed/SpeedChart";
+import {
+  createBrowserTransport,
+  type LiveSpeedSample,
+} from "../features/speed/protocol";
 import { StabilityMonitor } from "../features/stability/monitor";
 import { jitter, type Sample } from "../features/stability/metrics";
 import {
@@ -28,46 +32,44 @@ type Net = {
   rtt?: number;
   saveData?: boolean;
 };
-const pingURL = () =>
+const stabilityPingURL = () =>
   `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/ping`;
-export function warmPing(signal: AbortSignal, timeoutMs = 10_000) {
-  return new Promise<number>((resolve, reject) => {
-    const ws = new WebSocket(pingURL());
-    const values: number[] = [];
-    let sent = 0;
-    let began = 0;
-    let settled = false;
-    const finish = (error?: Error, value?: number) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timeout);
-      signal.removeEventListener("abort", abort);
-      ws.close();
-      if (error) reject(error);
-      else resolve(value!);
-    };
-    const abort = () => finish(new DOMException("Aborted", "AbortError"));
-    const timeout = setTimeout(
-      () => finish(new Error("Ping timed out")),
-      timeoutMs,
-    );
-    if (signal.aborted) return abort();
-    signal.addEventListener("abort", abort, { once: true });
-    const next = () => {
-      began = performance.now();
-      ws.send(String(++sent));
-    };
-    ws.onopen = next;
-    ws.onmessage = () => {
-      values.push(performance.now() - began);
-      if (values.length < 13) next();
-      else {
-        const ranked = values.slice(3).sort((a, b) => a - b);
-        finish(undefined, ranked[Math.floor(ranked.length / 2)]);
-      }
-    };
-    ws.onerror = () => finish(new Error("Ping failed"));
-  });
+export async function warmPing(
+  signal: AbortSignal,
+  timeoutMs = 10_000,
+  fetcher: typeof fetch = fetch,
+  now = () => performance.now(),
+) {
+  const ctl = new AbortController();
+  let timedOut = false;
+  const abort = () => ctl.abort();
+  if (signal.aborted) abort();
+  else signal.addEventListener("abort", abort, { once: true });
+  const timeout = window.setTimeout(() => {
+    timedOut = true;
+    ctl.abort();
+  }, timeoutMs);
+  const values: number[] = [];
+  try {
+    for (let index = 0; index < 8; index++) {
+      const started = now();
+      const response = await fetcher(`/healthz?ping=${index}`, {
+        signal: ctl.signal,
+        cache: "no-store",
+      });
+      if (!response.ok) throw new Error("Ping failed");
+      values.push(now() - started);
+    }
+  } catch (error) {
+    if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+    if (timedOut) throw new Error("Ping timed out");
+    throw error;
+  } finally {
+    window.clearTimeout(timeout);
+    signal.removeEventListener("abort", abort);
+  }
+  const ranked = values.slice(2).sort((a, b) => a - b);
+  return ranked[Math.floor(ranked.length / 2)];
 }
 export async function closeRun(
   id: string,
@@ -145,6 +147,9 @@ export function App() {
   const [tab, setTab] = useState<"speed" | "stability" | "history">("speed");
   const [history, setHistory] = useState<SpeedResult[]>([]);
   const [result, setResult] = useState<SpeedResult>();
+  const [liveSpeed, setLiveSpeed] = useState<LiveSpeedSample[]>([]);
+  const [livePing, setLivePing] = useState<number>();
+  const [running, setRunning] = useState(false);
   const [pngBlob, setPNGBlob] = useState<Blob>();
   const [info, setInfo] = useState<Info>();
   const [samples, setSamples] = useState<Sample[]>([]);
@@ -220,12 +225,17 @@ export function App() {
   async function measure() {
     if (monitoring) return;
     setPNGBlob(undefined);
+    setResult(undefined);
+    setLiveSpeed([]);
+    setLivePing(undefined);
     const ctl = new AbortController();
     let runID: string | undefined;
     runCtl.current = ctl;
+    setRunning(true);
     try {
       setStatus(t.pinging);
       const ping = await warmPing(ctl.signal);
+      setLivePing(ping);
       const created = await fetch("/api/test-runs", {
         method: "POST",
         signal: ctl.signal,
@@ -235,12 +245,21 @@ export function App() {
       runID = run.id;
       setStatus(t.downloading);
       const value = await runAdaptive(
-        createBrowserTransport(run.id),
+        createBrowserTransport(
+          run.id,
+          fetch,
+          () => performance.now(),
+          (sample) => {
+            setLiveSpeed((current) => [...current.slice(-159), sample]);
+            setStatus(
+              sample.direction === "download" ? t.downloading : t.uploading,
+            );
+          },
+        ),
         ctl.signal,
       );
       warnIncompleteDownload(value.incompleteDownloadStreams);
       if (await closeRun(run.id)) runID = undefined;
-      setStatus(t.uploading);
       const stored: SpeedResult = {
         at: Date.now(),
         download: value.downloadMbps,
@@ -271,6 +290,7 @@ export function App() {
     } finally {
       if (runID) await closeRun(runID);
       runCtl.current = undefined;
+      setRunning(false);
     }
   }
   function stopMonitoring() {
@@ -282,7 +302,7 @@ export function App() {
   function startMonitoring() {
     if (runCtl.current) return;
     const m = new StabilityMonitor({
-      url: pingURL(),
+      url: stabilityPingURL(),
       onSample: (s) => setSamples((x) => [...x, s]),
       onPause: () => setPauses((x) => [...x, Date.now()]),
     });
@@ -352,15 +372,44 @@ export function App() {
       {tab === "speed" && (
         <section>
           <button
-            disabled={monitoring || !!runCtl.current}
+            disabled={monitoring || running}
             onClick={() => void measure()}
           >
             {t.start}
           </button>
-          {runCtl.current && (
+          {running && (
             <button onClick={() => runCtl.current?.abort()}>{t.cancel}</button>
           )}
           <p aria-live="polite">{status}</p>
+          {(running || liveSpeed.length > 0 || livePing !== undefined) && (
+            <div class="live-measurement">
+              <div class="live-metrics" aria-live="polite">
+                <div>
+                  <span>
+                    {liveSpeed.at(-1)?.direction === "upload"
+                      ? t.uploadLabel
+                      : t.downloadLabel}
+                  </span>
+                  <strong>{liveSpeed.at(-1)?.mbps.toFixed(1) ?? "–"}</strong>
+                  <small>Mbps</small>
+                </div>
+                <div>
+                  <span>{t.httpPing}</span>
+                  <strong>{livePing?.toFixed(1) ?? "–"}</strong>
+                  <small>ms</small>
+                </div>
+              </div>
+              <SpeedChart
+                samples={liveSpeed}
+                labels={{
+                  aria: t.liveSpeedChart,
+                  download: t.downloadLabel,
+                  upload: t.uploadLabel,
+                  empty: t.noSamples,
+                }}
+              />
+            </div>
+          )}
           {info && (
             <aside>
               <h2>{t.network}</h2>

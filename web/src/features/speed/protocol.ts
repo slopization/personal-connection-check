@@ -4,6 +4,11 @@ type Fetcher = (
   input: RequestInfo | URL,
   init?: RequestInit,
 ) => Promise<Response>;
+export type LiveSpeedSample = {
+  at: number;
+  direction: "download" | "upload";
+  mbps: number;
+};
 const CHUNK = 1024 * 1024;
 const PHASE_MS = 1250;
 const DOWNLOAD_TIMEOUT_MS = PHASE_MS + 500;
@@ -30,6 +35,7 @@ export function createBrowserTransport(
   runID: string,
   fetcher: Fetcher = fetch,
   now = () => performance.now(),
+  onLiveSample?: (sample: LiveSpeedSample) => void,
 ): Transport {
   const url = (path: string) => `/api/test-runs/${runID}/${path}`;
   async function downloadWorker(
@@ -112,11 +118,21 @@ export function createBrowserTransport(
         ]);
         if (drainTimeout !== undefined) window.clearTimeout(drainTimeout);
       }
+      if (
+        !progress.frozen &&
+        !parent.aborted &&
+        progress.bytes > 0 &&
+        progress.samples.length === 0
+      ) {
+        const final = mbps(progress.bytes, now() - started);
+        if (final > 0) progress.samples.push(final);
+      }
       progress.settled = true;
     }
   }
   async function uploadWorker(
     parent: AbortSignal,
+    progress?: { ackBytes: number },
   ): Promise<{ ackBytes: number; samples: number[] }> {
     const ctl = new AbortController();
     const phaseEnded = Symbol("phase ended");
@@ -158,6 +174,7 @@ export function createBrowserTransport(
         if (ack === phaseEnded) break;
         const acknowledged = ack as { bytes?: number };
         ackBytes += Number(acknowledged.bytes) || 0;
+        if (progress) progress.ackBytes = ackBytes;
         const elapsed = now() - started;
         if (elapsed >= (samples.length + 1) * 250)
           samples.push(mbps(ackBytes, elapsed));
@@ -168,6 +185,8 @@ export function createBrowserTransport(
       window.clearTimeout(timeout);
       parent.removeEventListener("abort", cancel);
     }
+    const final = mbps(ackBytes, now() - started);
+    if (final > 0 && samples.length === 0) samples.push(final);
     return { ackBytes, samples };
   }
   return {
@@ -184,6 +203,16 @@ export function createBrowserTransport(
         settled: false,
         frozen: false,
       }));
+      const liveStarted = now();
+      const emitLive = () => {
+        const bytes = progress.reduce((total, item) => total + item.bytes, 0);
+        const rate = mbps(bytes, now() - liveStarted);
+        if (rate > 0)
+          onLiveSample?.({ at: now(), direction: "download", mbps: rate });
+      };
+      const liveTimer = onLiveSample
+        ? window.setInterval(emitLive, 250)
+        : undefined;
       const workers = progress.map((state) =>
         downloadWorker(phase.signal, state),
       );
@@ -205,6 +234,8 @@ export function createBrowserTransport(
         void all.catch(() => undefined);
         throw error;
       } finally {
+        if (liveTimer !== undefined) window.clearInterval(liveTimer);
+        emitLive();
         if (aggregateTimeout !== undefined)
           window.clearTimeout(aggregateTimeout);
         signal.removeEventListener("abort", cancel);
@@ -222,9 +253,29 @@ export function createBrowserTransport(
       };
     },
     async upload(streams, signal) {
-      const all = await Promise.all(
-        Array.from({ length: streams }, () => uploadWorker(signal)),
-      );
+      const progress = Array.from({ length: streams }, () => ({ ackBytes: 0 }));
+      const liveStarted = now();
+      const emitLive = () => {
+        const bytes = progress.reduce(
+          (total, item) => total + item.ackBytes,
+          0,
+        );
+        const rate = mbps(bytes, now() - liveStarted);
+        if (rate > 0)
+          onLiveSample?.({ at: now(), direction: "upload", mbps: rate });
+      };
+      const liveTimer = onLiveSample
+        ? window.setInterval(emitLive, 250)
+        : undefined;
+      let all: { ackBytes: number; samples: number[] }[] = [];
+      try {
+        all = await Promise.all(
+          progress.map((state) => uploadWorker(signal, state)),
+        );
+      } finally {
+        if (liveTimer !== undefined) window.clearInterval(liveTimer);
+        emitLive();
+      }
       return {
         ackBytes: all.reduce((n, x) => n + x.ackBytes, 0),
         samples: aggregateMbpsSamples(all.map((x) => x.samples)),

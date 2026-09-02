@@ -24,6 +24,7 @@ test("speed result includes upload and PNG download", async ({ page }) => {
   const failedResponses: string[] = [];
   const downloadAPIRequests: string[] = [];
   const partialStreamLogs: string[] = [];
+  const httpPingRequests: string[] = [];
   let recordingDownload = false;
   page.on("response", (response) => {
     if (response.status() >= 400 && response.url().includes("/api/"))
@@ -32,6 +33,8 @@ test("speed result includes upload and PNG download", async ({ page }) => {
       );
   });
   page.on("request", (request) => {
+    if (request.url().includes("/healthz?ping="))
+      httpPingRequests.push(request.url());
     if (recordingDownload && request.url().includes("/api/"))
       downloadAPIRequests.push(new URL(request.url()).pathname);
   });
@@ -44,6 +47,13 @@ test("speed result includes upload and PNG download", async ({ page }) => {
   });
   await login(page);
   await page.getByRole("button", { name: /start test/i }).click();
+  await expect(page.getByText("HTTP ping")).toBeVisible();
+  await expect(page.locator(".speed-line.download")).toHaveAttribute(
+    "points",
+    /.+/,
+    { timeout: 20_000 },
+  );
+  expect(httpPingRequests).toHaveLength(8);
   const status = page.locator('section p[aria-live="polite"]');
   try {
     await expect(status).toContainText(/Mbps \/ .*Mbps/, { timeout: 50_000 });

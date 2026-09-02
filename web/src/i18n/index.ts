@@ -26,6 +26,10 @@ export type Copy = {
   chartAria: string;
   chartRtt: string;
   noSamples: string;
+  liveSpeedChart: string;
+  httpPing: string;
+  downloadLabel: string;
+  uploadLabel: string;
   jitter: string;
   range10m: string;
   range1h: string;
@@ -69,6 +73,10 @@ export const text: Record<Language, Copy> = {
     chartAria: "Stability chart",
     chartRtt: "RTT",
     noSamples: "No samples",
+    liveSpeedChart: "Live throughput chart",
+    httpPing: "HTTP ping",
+    downloadLabel: "Download",
+    uploadLabel: "Upload",
     jitter: "jitter",
     range10m: "10m",
     range1h: "1h",
@@ -108,6 +116,10 @@ export const text: Record<Language, Copy> = {
     chartAria: "안정성 차트",
     chartRtt: "왕복 시간",
     noSamples: "샘플 없음",
+    liveSpeedChart: "실시간 속도 그래프",
+    httpPing: "HTTP 핑",
+    downloadLabel: "다운로드",
+    uploadLabel: "업로드",
     jitter: "지터",
     range10m: "10분",
     range1h: "1시간",
