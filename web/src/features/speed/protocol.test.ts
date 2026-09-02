@@ -72,8 +72,9 @@ describe("browser speed transport", () => {
                     value: new Uint8Array(8),
                   });
                 return new Promise<{ done: true; value?: undefined }>(
-                  (resolve) => {
-                    finishRead = () => resolve({ done: true });
+                  (_resolve, reject) => {
+                    finishRead = () =>
+                      reject(new DOMException("cancelled", "AbortError"));
                     readBlocked();
                   },
                 );
@@ -99,5 +100,30 @@ describe("browser speed transport", () => {
     finishCancel();
     await result;
     expect(settled).toBe(true);
+  });
+
+  it("does not cancel a download reader after normal EOF", async () => {
+    const cancel = vi.fn(() => new Promise<void>(() => undefined));
+    const fetcher = vi.fn(
+      async () =>
+        ({
+          ok: true,
+          body: {
+            getReader: () => ({
+              read: async () => ({ done: true, value: undefined }),
+              cancel,
+            }),
+          },
+        }) as unknown as Response,
+    );
+    const transport = createBrowserTransport("run", fetcher, () => 1000);
+
+    const settled = await Promise.race([
+      transport.download(1, new AbortController().signal).then(() => true),
+      new Promise<false>((resolve) => setTimeout(() => resolve(false), 50)),
+    ]);
+
+    expect(settled).toBe(true);
+    expect(cancel).not.toHaveBeenCalled();
   });
 });

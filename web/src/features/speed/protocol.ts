@@ -32,10 +32,14 @@ export function createBrowserTransport(
     const reader = response.body.getReader();
     let bytes = 0;
     const samples: number[] = [];
+    let complete = false;
     try {
       for (;;) {
         const x = await reader.read();
-        if (x.done) break;
+        if (x.done) {
+          complete = true;
+          break;
+        }
         bytes += x.value.byteLength;
         const elapsed = now() - started;
         if (elapsed >= (samples.length + 1) * 250)
@@ -45,7 +49,16 @@ export function createBrowserTransport(
       if (!signal.aborted) throw error;
     } finally {
       window.clearTimeout(timeout);
-      await reader.cancel().catch(() => undefined);
+      if (!complete) {
+        let drainTimeout: number | undefined;
+        await Promise.race([
+          reader.cancel().catch(() => undefined),
+          new Promise<void>((resolve) => {
+            drainTimeout = window.setTimeout(resolve, 250);
+          }),
+        ]);
+        if (drainTimeout !== undefined) window.clearTimeout(drainTimeout);
+      }
     }
     return { bytes, samples };
   }
