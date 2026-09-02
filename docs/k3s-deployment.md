@@ -17,23 +17,17 @@ Use a fixed version tag for a stable deployment. The examples use `v1.0.0`; repl
 
 ## 2. Create the authentication Secret
 
-Generate the password hash and session key locally. The password is read from standard input and is never placed in a process argument. Copy each one-line result for use in the Secret file below.
+Generate the password hash with the published image, without installing Argon2id tooling or checking out the source. The password is read without terminal echo and is never placed in a process argument:
 
 ```bash
-set -euo pipefail
-IMAGE='git.kyu.sh/modelgarden/personal-connection-check:v1.0.0'
+read -rsp 'Shared password: ' PASSWORD; printf '\n'
+printf '%s\n' "$PASSWORD" | docker run --rm -i git.kyu.sh/modelgarden/personal-connection-check:v1.0.0 hash-password; unset PASSWORD
+```
 
-read -rsp 'Shared password: ' PASSWORD
-trap 'unset PASSWORD' EXIT HUP INT TERM
-printf '\nPCC_SHARED_PASSWORD_HASH='
-printf '%s\n' "$PASSWORD" | docker run --rm -i "$IMAGE" hash-password \
-  | tr -d '\r\n'
-printf '\n'
-unset PASSWORD
-trap - EXIT HUP INT TERM
-printf 'PCC_SESSION_KEYS='
-openssl rand -base64 32 | tr '+/' '-_' | tr -d '=\n'
-printf '\n'
+Generate the session key separately:
+
+```sh
+openssl rand -base64 32 | tr '+/' '-_' | tr -d '=\n'; printf '\n'
 ```
 
 Save the following as `pcc-secrets.yaml`, replace both placeholders with the generated one-line values, and keep the file outside version control:
