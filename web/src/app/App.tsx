@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import { language, text } from "../i18n";
-import { isDesktopSafari } from "../browser";
+import { isUnsupportedWebKit } from "../browser";
 import {
   clear,
   latestStability,
@@ -125,7 +125,7 @@ export function IncompleteDownloadWarning({ count }: { count: number }) {
   );
 }
 export function App() {
-  const desktopSafari = isDesktopSafari();
+  const unsupportedWebKit = isUnsupportedWebKit();
   const [password, setPassword] = useState("");
   const [logged, setLogged] = useState(false);
   const [status, setStatus] = useState("");
@@ -253,9 +253,9 @@ export function App() {
     return (
       <main>
         <h1>{t.title}</h1>
-        {desktopSafari && (
+        {unsupportedWebKit && (
           <p class="browser-warning" role="alert">
-            {t.desktopSafariWarning}
+            {t.webKitWarning}
           </p>
         )}
         <label>
@@ -291,9 +291,9 @@ export function App() {
           ))}
         </nav>
       </header>
-      {desktopSafari && (
+      {unsupportedWebKit && (
         <p class="browser-warning" role="alert">
-          {t.desktopSafariWarning}
+          {t.webKitWarning}
         </p>
       )}
       {tab === "speed" && (

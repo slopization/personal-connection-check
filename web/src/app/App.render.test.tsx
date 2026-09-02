@@ -90,15 +90,15 @@ describe("stability restoration and Korean UI", () => {
     );
   });
 
-  it("warns desktop Safari without disabling measurement", async () => {
+  it("warns mobile Safari without disabling measurement", async () => {
     const { clear } = await import("../storage/database");
     await clear();
     const host = await loggedInApp(
-      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15",
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1",
     );
 
     expect(host.querySelector('[role="alert"]')?.textContent).toContain(
-      "데스크톱 Safari는 지원되지 않는 브라우저입니다",
+      "Safari 및 WebKit 계열 브라우저는 지원되지 않습니다",
     );
     expect(
       [...host.querySelectorAll("button")].find(

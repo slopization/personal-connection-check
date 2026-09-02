@@ -92,7 +92,7 @@ cd web && npm ci
 make check
 ```
 
-The full clean-runner release gate additionally installs Playwright browsers, runs desktop/mobile Chromium, desktop Firefox, and desktop/mobile WebKit E2E tests, builds the OCI image, and executes its read-only smoke test. Safari remains usable but unsupported; a stalled WebKit reader is bounded, its partial bytes are retained, and the UI plus console disclose that the result may be conservative:
+The full clean-runner release gate additionally installs Playwright browsers, runs desktop/mobile Chromium and desktop Firefox E2E tests, builds the OCI image, and executes its read-only smoke test. Safari and WebKit-based browsers are excluded from the supported CI matrix because they do not provide a reproducible non-macOS validation loop for this streaming workload. They remain usable but display a non-blocking unsupported-browser warning. If any browser still yields a bounded partial stream, its received bytes are retained and the UI plus console disclose that the result may be conservative:
 
 ```sh
 make e2e-install

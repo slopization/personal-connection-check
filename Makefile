@@ -26,6 +26,6 @@ container-smoke:
 e2e:
 	cd web && ./node_modules/.bin/playwright test
 e2e-install:
-	cd web && ./node_modules/.bin/playwright install --with-deps chromium firefox webkit
+	cd web && ./node_modules/.bin/playwright install --with-deps chromium firefox
 check: fmt-check lint typecheck test-go test-race test-web build
 release-gate: check e2e container container-smoke

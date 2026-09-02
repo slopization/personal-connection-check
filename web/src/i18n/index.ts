@@ -18,7 +18,7 @@ export type Copy = {
   png: string;
   network: string;
   unsupported: string;
-  desktopSafariWarning: string;
+  webKitWarning: string;
   incompleteDownloadWarning: (count: number) => string;
   paused: string;
   methodology: string;
@@ -57,8 +57,8 @@ export const text: Record<Language, Copy> = {
     png: "Download PNG",
     network: "Network information",
     unsupported: "Not provided by this browser",
-    desktopSafariWarning:
-      "Desktop Safari is not a supported browser. The test remains available, but it may not complete; Chrome or Firefox is recommended.",
+    webKitWarning:
+      "Safari and WebKit-based browsers are not supported. The test remains available, but it may not complete; Chrome or Firefox is recommended.",
     incompleteDownloadWarning: (count) =>
       `${count} download stream${count === 1 ? "" : "s"} did not finish cleanly. The result uses bytes received before the deadline and may be lower than the actual speed.`,
     paused: "Measurement paused",
@@ -96,8 +96,8 @@ export const text: Record<Language, Copy> = {
     png: "PNG 저장",
     network: "네트워크 정보",
     unsupported: "브라우저에서 제공하지 않음",
-    desktopSafariWarning:
-      "데스크톱 Safari는 지원되지 않는 브라우저입니다. 측정은 시도할 수 있지만 완료되지 않을 수 있으므로 Chrome 또는 Firefox를 권장합니다.",
+    webKitWarning:
+      "Safari 및 WebKit 계열 브라우저는 지원되지 않습니다. 측정은 시도할 수 있지만 완료되지 않을 수 있으므로 Chrome 또는 Firefox를 권장합니다.",
     incompleteDownloadWarning: (count) =>
       `다운로드 스트림 ${count}개가 정상적으로 끝나지 않았습니다. 제한 시간 전까지 받은 바이트로 계산되어 실제 속도보다 낮을 수 있습니다.`,
     paused: "측정 일시정지",
