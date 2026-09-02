@@ -97,14 +97,14 @@ func TestContainerWorkflowContract(t *testing.T) {
 		"test -s image-digest.txt",
 		"GITHUB_OUTPUT",
 		"image_digest:",
-		"PACKAGE_TOKEN: ${{ secrets.PACKAGE_TOKEN }}",
+		"echo \"$FORGEJO_TOKEN\" | docker login",
 		"refs/heads/main",
 		"^refs/tags/v[0-9]+\\.[0-9]+\\.[0-9]+$",
 	} {
 		requireContains(t, s, want)
 	}
-	if strings.Contains(s, "REGISTRY_TOKEN:") || strings.Contains(s, "actions/") {
-		t.Fatal("workflow must scope PACKAGE_TOKEN directly to publish and avoid third-party actions")
+	if strings.Contains(s, "REGISTRY_TOKEN:") || strings.Contains(s, "PACKAGE_TOKEN") || strings.Contains(s, "secrets.") || strings.Contains(s, "actions/") {
+		t.Fatal("workflow must use the ephemeral Forgejo job token and avoid long-lived secrets or third-party actions")
 	}
 	if strings.Index(s, "docker push \"$IMAGE:sha-${GITHUB_SHA:0:12}\"") > strings.Index(s, "docker pull \"$IMAGE:sha-${GITHUB_SHA:0:12}\"") {
 		t.Fatal("workflow must push the immutable SHA tag before pulling it")
@@ -114,8 +114,8 @@ func TestContainerWorkflowContract(t *testing.T) {
 		t.Fatal("missing publish step")
 	}
 	prefix := s[:publishStart]
-	if strings.Contains(prefix, "PACKAGE_TOKEN") {
-		t.Fatal("PACKAGE_TOKEN must not be available before the publish step")
+	if strings.Contains(prefix, "FORGEJO_TOKEN") {
+		t.Fatal("FORGEJO_TOKEN must not be referenced before the publish step")
 	}
 }
 
