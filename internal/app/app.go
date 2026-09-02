@@ -1,15 +1,19 @@
 package app
 
 import (
+	"bytes"
 	"codeberg.org/modelgarden/personal-connection-check/internal/auth"
 	"codeberg.org/modelgarden/personal-connection-check/internal/config"
 	"codeberg.org/modelgarden/personal-connection-check/internal/networkinfo"
 	"codeberg.org/modelgarden/personal-connection-check/internal/speedtest"
 	"codeberg.org/modelgarden/personal-connection-check/internal/webui"
 	"context"
+	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"github.com/coder/websocket"
+	"hash/crc32"
 	"io"
 	"net/http"
 	"net/url"
@@ -112,6 +116,10 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case r.URL.Path == "/api/test-runs" && r.Method == "POST":
 		if a.origin(w, r) {
 			a.protected(w, r, a.create)
+		}
+	case r.URL.Path == "/api/share.png" && r.Method == "POST":
+		if a.origin(w, r) {
+			a.protected(w, r, a.sharePNG)
 		}
 	case strings.HasPrefix(r.URL.Path, "/api/test-runs/") && r.Method == "DELETE":
 		if a.origin(w, r) {
@@ -257,6 +265,32 @@ func (a *App) closeRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+func (a *App) sharePNG(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 5<<20)
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid PNG", http.StatusBadRequest)
+		return
+	}
+	png, err := base64.StdEncoding.DecodeString(r.Form.Get("data"))
+	if err != nil || !validSharePNG(png) {
+		http.Error(w, "invalid PNG", http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Content-Disposition", `attachment; filename="connection-check.png"`)
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Content-Length", strconv.Itoa(len(png)))
+	_, _ = w.Write(png)
+}
+func validSharePNG(png []byte) bool {
+	return len(png) >= 33 && len(png) <= 3<<20 &&
+		bytes.Equal(png[:8], []byte("\x89PNG\r\n\x1a\n")) &&
+		binary.BigEndian.Uint32(png[8:12]) == 13 &&
+		bytes.Equal(png[12:16], []byte("IHDR")) &&
+		binary.BigEndian.Uint32(png[16:20]) == 1200 &&
+		binary.BigEndian.Uint32(png[20:24]) == 630 &&
+		binary.BigEndian.Uint32(png[29:33]) == crc32.ChecksumIEEE(png[12:29])
 }
 func (a *App) run(r *http.Request) (*speedtest.Run, bool) {
 	c, ok := a.claims(r)

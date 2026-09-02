@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { closeRun, downloadBlob, warmPing } from "./App";
+import { blobBase64, closeRun, submitPNG, warmPing } from "./App";
 
 class PendingSocket {
   static instances: PendingSocket[] = [];
@@ -28,28 +28,30 @@ describe("run cleanup", () => {
 });
 
 describe("PNG download", () => {
-  it("clicks the download anchor while it is connected for WebKit", () => {
+  it("encodes a PNG blob for the native attachment form", async () => {
+    await expect(blobBase64(new Blob(["png"]))).resolves.toBe("cG5n");
+  });
+
+  it("submits a connected same-origin form for WebKit native attachment", () => {
     vi.useFakeTimers();
-    const click = vi
-      .spyOn(HTMLAnchorElement.prototype, "click")
-      .mockImplementation(function (this: HTMLAnchorElement) {
+    const submit = vi
+      .spyOn(HTMLFormElement.prototype, "submit")
+      .mockImplementation(function (this: HTMLFormElement) {
         expect(this.isConnected).toBe(true);
+        expect(this.method).toBe("post");
+        expect(this.action).toMatch(/\/api\/share\.png$/);
+        expect(new FormData(this).get("data")).toBe("cG5n");
       });
-    const revoke = vi.fn();
 
-    downloadBlob(new Blob(["png"]), document, () => "blob:test", revoke);
+    submitPNG("cG5n", document);
 
-    expect(click).toHaveBeenCalledOnce();
+    expect(submit).toHaveBeenCalledOnce();
     expect(
-      document.querySelector('a[download="connection-check.png"]'),
+      document.querySelector('form[action="/api/share.png"]'),
     ).not.toBeNull();
-    expect(revoke).not.toHaveBeenCalled();
     vi.runAllTimers();
-    expect(
-      document.querySelector('a[download="connection-check.png"]'),
-    ).toBeNull();
-    expect(revoke).toHaveBeenCalledWith("blob:test");
-    click.mockRestore();
+    expect(document.querySelector('form[action="/api/share.png"]')).toBeNull();
+    submit.mockRestore();
     vi.useRealTimers();
   });
 });

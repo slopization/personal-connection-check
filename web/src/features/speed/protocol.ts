@@ -84,9 +84,18 @@ export function createBrowserTransport(
     parent: AbortSignal,
   ): Promise<{ ackBytes: number; samples: number[] }> {
     const ctl = new AbortController();
-    const timeout = window.setTimeout(() => ctl.abort(), PHASE_MS);
-    const cancel = () => ctl.abort();
-    parent.addEventListener("abort", cancel, { once: true });
+    const phaseEnded = Symbol("phase ended");
+    let endPhase!: () => void;
+    const phaseStop = new Promise<typeof phaseEnded>((resolve) => {
+      endPhase = () => resolve(phaseEnded);
+    });
+    const cancel = () => {
+      ctl.abort();
+      endPhase();
+    };
+    const timeout = window.setTimeout(cancel, PHASE_MS);
+    if (parent.aborted) cancel();
+    else parent.addEventListener("abort", cancel, { once: true });
     const signal = ctl.signal;
     const started = now();
     let ackBytes = 0;
@@ -99,15 +108,21 @@ export function createBrowserTransport(
         now() - started < PHASE_MS;
         i++
       ) {
-        const response = await fetcher(url("upload"), {
-          method: "POST",
-          body: new Uint8Array(CHUNK),
-          signal,
-          cache: "no-store",
-        });
+        const response = await Promise.race([
+          fetcher(url("upload"), {
+            method: "POST",
+            body: new Uint8Array(CHUNK),
+            signal,
+            cache: "no-store",
+          }),
+          phaseStop,
+        ]);
+        if (response === phaseEnded) break;
         if (!response.ok) throw new Error("upload failed");
-        const ack = (await response.json()) as { bytes?: number };
-        ackBytes += Number(ack.bytes) || 0;
+        const ack = await Promise.race([response.json(), phaseStop]);
+        if (ack === phaseEnded) break;
+        const acknowledged = ack as { bytes?: number };
+        ackBytes += Number(acknowledged.bytes) || 0;
         const elapsed = now() - started;
         if (elapsed >= (samples.length + 1) * 250)
           samples.push(mbps(ackBytes, elapsed));

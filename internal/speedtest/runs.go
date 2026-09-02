@@ -16,16 +16,24 @@ type Run struct {
 	cancel    context.CancelFunc
 	slots     chan struct{}
 	once      sync.Once
+	mu        sync.Mutex
+	closed    bool
+	active    sync.WaitGroup
+	drained   chan struct{}
 }
 
 func (r *Run) Context() context.Context { return r.ctx }
 func (r *Run) Acquire(ctx context.Context) bool {
-	select {
-	case <-r.ctx.Done():
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.closed || r.ctx.Err() != nil {
 		return false
+	}
+	select {
 	case <-ctx.Done():
 		return false
 	case r.slots <- struct{}{}:
+		r.active.Add(1)
 		return true
 	default:
 		return false
@@ -34,10 +42,26 @@ func (r *Run) Acquire(ctx context.Context) bool {
 func (r *Run) Release() {
 	select {
 	case <-r.slots:
+		r.active.Done()
 	default:
 	}
 }
-func (r *Run) close() { r.once.Do(func() { r.cancel() }) }
+func (r *Run) beginClose() {
+	r.once.Do(func() {
+		r.mu.Lock()
+		r.closed = true
+		r.cancel()
+		r.mu.Unlock()
+		go func() {
+			r.active.Wait()
+			close(r.drained)
+		}()
+	})
+}
+func (r *Run) close() {
+	r.beginClose()
+	<-r.drained
+}
 
 type Registry struct {
 	mu                sync.Mutex
@@ -78,7 +102,7 @@ func (r *Registry) Create(owner string) (*Run, error) {
 		return nil, e
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), r.ttl)
-	x := &Run{ID: base64.RawURLEncoding.EncodeToString(b), Owner: owner, Expires: time.Now().Add(r.ttl), ctx: ctx, cancel: cancel, slots: make(chan struct{}, r.streams)}
+	x := &Run{ID: base64.RawURLEncoding.EncodeToString(b), Owner: owner, Expires: time.Now().Add(r.ttl), ctx: ctx, cancel: cancel, slots: make(chan struct{}, r.streams), drained: make(chan struct{})}
 	r.runs[x.ID] = x
 	go func() { <-ctx.Done(); r.Close(x.ID) }()
 	return x, nil
@@ -100,34 +124,51 @@ func (r *Registry) CloseOwned(id, owner string) error {
 		r.mu.Unlock()
 		return errors.New("not found")
 	}
-	delete(r.runs, id)
+	x.beginClose()
 	r.mu.Unlock()
-	x.close()
+	r.finishClose(id, x)
 	return nil
 }
 func (r *Registry) Close(id string) {
 	r.mu.Lock()
 	x := r.runs[id]
-	delete(r.runs, id)
+	if x != nil {
+		x.beginClose()
+	}
 	r.mu.Unlock()
 	if x != nil {
-		x.close()
+		r.finishClose(id, x)
 	}
 }
 func (r *Registry) CloseAll() {
 	r.mu.Lock()
-	runs := r.runs
-	r.runs = map[string]*Run{}
-	r.mu.Unlock()
-	for _, x := range runs {
-		x.close()
+	runs := make(map[string]*Run, len(r.runs))
+	for id, x := range r.runs {
+		runs[id] = x
+		x.beginClose()
 	}
+	r.mu.Unlock()
+	for id, x := range runs {
+		r.finishClose(id, x)
+	}
+}
+func (r *Registry) finishClose(id string, x *Run) {
+	<-x.drained
+	r.mu.Lock()
+	if r.runs[id] == x {
+		delete(r.runs, id)
+	}
+	r.mu.Unlock()
 }
 func (r *Registry) cleanupLocked() {
 	for k, x := range r.runs {
 		if x.ctx.Err() != nil || time.Now().After(x.Expires) {
-			delete(r.runs, k)
-			x.close()
+			x.beginClose()
+			select {
+			case <-x.drained:
+				delete(r.runs, k)
+			default:
+			}
 		}
 	}
 }

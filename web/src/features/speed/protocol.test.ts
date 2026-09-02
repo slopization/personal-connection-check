@@ -2,6 +2,26 @@ import { describe, expect, it, vi } from "vitest";
 import { createBrowserTransport } from "./protocol";
 
 describe("browser speed transport", () => {
+  it("bounds an upload when WebKit fetch ignores abort", async () => {
+    vi.useFakeTimers();
+    const fetcher: typeof fetch = vi.fn(
+      () => new Promise<Response>(() => undefined),
+    );
+    const transport = createBrowserTransport("run", fetcher, () => 0);
+    let settled = false;
+    const result = transport
+      .upload(1, new AbortController().signal)
+      .then((value) => {
+        settled = true;
+        return value;
+      });
+
+    await vi.advanceTimersByTimeAsync(1_250);
+    expect(settled).toBe(true);
+    expect((await result).ackBytes).toBe(0);
+    vi.useRealTimers();
+  });
+
   it("bounds a download when WebKit reader.read never settles", async () => {
     vi.useFakeTimers();
     const cancel = vi.fn(async () => undefined);

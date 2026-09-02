@@ -82,24 +82,35 @@ export async function closeRun(
     return false;
   }
 }
-export function downloadBlob(
-  blob: Blob,
-  doc: Document = document,
-  createObjectURL: (blob: Blob) => string = URL.createObjectURL.bind(URL),
-  revokeObjectURL: (url: string) => void = URL.revokeObjectURL.bind(URL),
-): void {
-  const href = createObjectURL(blob);
-  const anchor = doc.createElement("a");
-  anchor.href = href;
-  anchor.download = "connection-check.png";
-  doc.body.append(anchor);
+export function blobBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error ?? new Error("PNG read failed"));
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result !== "string" || !result.includes(",")) {
+        reject(new Error("PNG encoding failed"));
+        return;
+      }
+      resolve(result.slice(result.indexOf(",") + 1));
+    };
+    reader.readAsDataURL(blob);
+  });
+}
+export function submitPNG(data: string, doc: Document = document): void {
+  const form = doc.createElement("form");
+  form.method = "post";
+  form.action = "/api/share.png";
+  const input = doc.createElement("input");
+  input.type = "hidden";
+  input.name = "data";
+  input.value = data;
+  form.append(input);
+  doc.body.append(form);
   try {
-    anchor.click();
+    form.submit();
   } finally {
-    window.setTimeout(() => {
-      anchor.remove();
-      revokeObjectURL(href);
-    }, 1000);
+    window.setTimeout(() => form.remove(), 1000);
   }
 }
 export function App() {
@@ -217,7 +228,7 @@ export function App() {
       title: t.title,
       methodology: t.methodology,
     });
-    downloadBlob(b);
+    submitPNG(await blobBase64(b));
   }
   if (!logged)
     return (
