@@ -29,10 +29,11 @@ jobs:
         if: github.event_name == 'push'
         env:
           IMAGE: git.kyu.sh/modelgarden/personal-connection-check
+          PACKAGE_TOKEN: ${{ secrets.PACKAGE_TOKEN }}
         run: |
           set -euo pipefail
-          test -n "${FORGEJO_TOKEN:-}"
-          echo "$FORGEJO_TOKEN" | docker login git.kyu.sh -u "$GITHUB_ACTOR" --password-stdin
+          test -n "${PACKAGE_TOKEN:-}"
+          echo "$PACKAGE_TOKEN" | docker login git.kyu.sh -u kyush-ci --password-stdin
           docker push "$IMAGE:sha-${GITHUB_SHA:0:12}"
           if [ "$GITHUB_REF" = "refs/heads/main" ]; then
             docker tag "$IMAGE:sha-${GITHUB_SHA:0:12}" "$IMAGE:latest"
