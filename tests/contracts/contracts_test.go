@@ -82,6 +82,11 @@ func TestCIInvokesReleaseGateAfterBrowserInstall(t *testing.T) {
 	}
 }
 
+func TestPlaywrightSerializesProjectsAgainstGlobalLimits(t *testing.T) {
+	s := read(t, "../../web/playwright.config.ts")
+	requireContains(t, s, "workers: 1")
+}
+
 func TestContainerWorkflowContract(t *testing.T) {
 	s := read(t, "../../.forgejo/workflows/container.yml")
 	for _, want := range []string{
