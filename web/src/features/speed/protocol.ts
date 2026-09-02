@@ -44,6 +44,7 @@ export function createBrowserTransport(
         const elapsed = now() - started;
         if (elapsed >= (samples.length + 1) * 250)
           samples.push(mbps(bytes, elapsed));
+        if (elapsed >= PHASE_MS) break;
       }
     } catch (error) {
       if (!signal.aborted) throw error;

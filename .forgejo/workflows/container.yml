@@ -22,7 +22,8 @@ jobs:
           IMAGE: git.kyu.sh/modelgarden/personal-connection-check
         run: |
           set -euo pipefail
-          docker build --label org.opencontainers.image.source=https://git.kyu.sh/modelgarden/personal-connection-check --label org.opencontainers.image.revision="$GITHUB_SHA" --label org.opencontainers.image.licenses=MIT -t "$IMAGE:sha-${GITHUB_SHA:0:12}" .
+          docker pull "$IMAGE:latest" || true
+          DOCKER_BUILDKIT=1 docker build --cache-from "$IMAGE:latest" --build-arg BUILDKIT_INLINE_CACHE=1 --label org.opencontainers.image.source=https://git.kyu.sh/modelgarden/personal-connection-check --label org.opencontainers.image.revision="$GITHUB_SHA" --label org.opencontainers.image.licenses=MIT -t "$IMAGE:sha-${GITHUB_SHA:0:12}" .
           make container-smoke IMAGE="$IMAGE:sha-${GITHUB_SHA:0:12}"
       - id: publish
         name: publish immutable and release tags

@@ -126,4 +126,36 @@ describe("browser speed transport", () => {
     expect(settled).toBe(true);
     expect(cancel).not.toHaveBeenCalled();
   });
+
+  it("stops reading buffered download data at the phase wall clock", async () => {
+    let reads = 0;
+    let clock = 0;
+    const cancel = vi.fn(async () => undefined);
+    const fetcher = vi.fn(
+      async () =>
+        ({
+          ok: true,
+          body: {
+            getReader: () => ({
+              read: async () => {
+                if (++reads > 10) throw new Error("drained buffered backlog");
+                return { done: false, value: new Uint8Array(8) };
+              },
+              cancel,
+            }),
+          },
+        }) as unknown as Response,
+    );
+    const transport = createBrowserTransport(
+      "run",
+      fetcher,
+      () => (clock += 500),
+    );
+
+    await expect(
+      transport.download(1, new AbortController().signal),
+    ).resolves.toMatchObject({ bytes: expect.any(Number) });
+    expect(reads).toBeLessThanOrEqual(3);
+    expect(cancel).toHaveBeenCalledOnce();
+  });
 });

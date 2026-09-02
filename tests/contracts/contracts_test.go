@@ -82,6 +82,25 @@ func TestCIInvokesReleaseGateAfterBrowserInstall(t *testing.T) {
 	}
 }
 
+func TestCICacheUsesPinnedForgejoActionAndVersionedPaths(t *testing.T) {
+	s := read(t, "../../.forgejo/workflows/ci.yml")
+	for _, want := range []string{
+		"https://code.forgejo.org/actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57",
+		"~/.cache/pcc-toolchains",
+		"~/.cache/ms-playwright",
+		"~/.cache/go-build",
+		"~/go/pkg/mod",
+		"~/.npm",
+		"go1.27.1-node26.0.0-playwright1.57.0",
+		"hashFiles('go.sum', 'web/package-lock.json')",
+	} {
+		requireContains(t, s, want)
+	}
+	if strings.Index(s, "actions/cache@") > strings.Index(s, "make e2e-install") {
+		t.Fatal("CI cache must be restored before dependency and browser installation")
+	}
+}
+
 func TestPlaywrightSerializesProjectsAgainstGlobalLimits(t *testing.T) {
 	s := read(t, "../../web/playwright.config.ts")
 	requireContains(t, s, "workers: 1")
@@ -93,6 +112,9 @@ func TestContainerWorkflowContract(t *testing.T) {
 		"git checkout --detach \"$GITHUB_SHA\"",
 		"set -euo pipefail",
 		"docker build",
+		"docker pull \"$IMAGE:latest\" || true",
+		"--cache-from \"$IMAGE:latest\"",
+		"BUILDKIT_INLINE_CACHE=1",
 		"make container-smoke",
 		"docker push \"$IMAGE:sha-${GITHUB_SHA:0:12}\"",
 		"docker pull \"$IMAGE:sha-${GITHUB_SHA:0:12}\"",
