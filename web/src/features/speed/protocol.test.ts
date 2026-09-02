@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
-import { createBrowserTransport } from "./protocol";
+import { aggregateMbpsSamples, createBrowserTransport } from "./protocol";
 
 describe("browser speed transport", () => {
+  it("sums aligned parallel-stream Mbps samples", () => {
+    expect(aggregateMbpsSamples([[10, 20], [11, 21], [12]])).toEqual([33, 53]);
+  });
+
   it("bounds an upload when WebKit fetch ignores abort", async () => {
     vi.useFakeTimers();
     const fetcher: typeof fetch = vi.fn(

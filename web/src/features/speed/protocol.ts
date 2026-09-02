@@ -12,6 +12,19 @@ const MAX_UPLOAD_REQUESTS = 8;
 const mbps = (bytes: number, elapsed: number) =>
   elapsed > 0 ? (bytes * 8 * 1000) / elapsed / 1_000_000 : 0;
 
+// Each worker reports cumulative decimal Mbps at roughly aligned intervals.
+// Parallel throughput is their sum, carrying a completed worker's last sample
+// forward when another worker emitted one additional interval.
+export const aggregateMbpsSamples = (workers: number[][]) => {
+  const length = Math.max(0, ...workers.map((samples) => samples.length));
+  return Array.from({ length }, (_, index) =>
+    workers.reduce((total, samples) => {
+      if (samples.length === 0) return total;
+      return total + samples[Math.min(index, samples.length - 1)];
+    }, 0),
+  );
+};
+
 /** Real browser transport: every byte counted from a reader; uploads count only JSON acknowledgements. */
 export function createBrowserTransport(
   runID: string,
@@ -203,7 +216,7 @@ export function createBrowserTransport(
       }
       return {
         bytes: progress.reduce((n, x) => n + x.bytes, 0),
-        samples: progress.flatMap((x) => x.samples),
+        samples: aggregateMbpsSamples(progress.map((x) => x.samples)),
         incompleteStreams: progress.filter((x) => x.incomplete || !x.settled)
           .length,
       };
@@ -214,7 +227,7 @@ export function createBrowserTransport(
       );
       return {
         ackBytes: all.reduce((n, x) => n + x.ackBytes, 0),
-        samples: all.flatMap((x) => x.samples),
+        samples: aggregateMbpsSamples(all.map((x) => x.samples)),
       };
     },
   };
