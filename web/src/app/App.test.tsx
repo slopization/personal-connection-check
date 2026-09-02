@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { closeRun, warmPing } from "./App";
+import { closeRun, downloadBlob, warmPing } from "./App";
 
 class PendingSocket {
   static instances: PendingSocket[] = [];
@@ -24,6 +24,30 @@ describe("run cleanup", () => {
       "/api/test-runs/run%2Fid",
       expect.objectContaining({ method: "DELETE", keepalive: true }),
     );
+  });
+});
+
+describe("PNG download", () => {
+  it("clicks the download anchor while it is connected for WebKit", () => {
+    vi.useFakeTimers();
+    const click = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(function (this: HTMLAnchorElement) {
+        expect(this.isConnected).toBe(true);
+      });
+    const revoke = vi.fn();
+
+    downloadBlob(new Blob(["png"]), document, () => "blob:test", revoke);
+
+    expect(click).toHaveBeenCalledOnce();
+    expect(
+      document.querySelector('a[download="connection-check.png"]'),
+    ).toBeNull();
+    expect(revoke).not.toHaveBeenCalled();
+    vi.runAllTimers();
+    expect(revoke).toHaveBeenCalledWith("blob:test");
+    click.mockRestore();
+    vi.useRealTimers();
   });
 });
 

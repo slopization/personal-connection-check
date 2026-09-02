@@ -85,7 +85,8 @@ func TestCIInvokesReleaseGateAfterBrowserInstall(t *testing.T) {
 func TestCICacheUsesPinnedForgejoActionAndVersionedPaths(t *testing.T) {
 	s := read(t, "../../.forgejo/workflows/ci.yml")
 	for _, want := range []string{
-		"https://code.forgejo.org/actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57",
+		"https://code.forgejo.org/actions/cache/restore@1bd1e32a3bdc45362d1e726936510720a7c30a57",
+		"https://code.forgejo.org/actions/cache/save@1bd1e32a3bdc45362d1e726936510720a7c30a57",
 		"~/.cache/pcc-toolchains",
 		"~/.cache/ms-playwright",
 		"~/.cache/go-build",
@@ -93,11 +94,16 @@ func TestCICacheUsesPinnedForgejoActionAndVersionedPaths(t *testing.T) {
 		"~/.npm",
 		"go1.27.1-node26.0.0-playwright1.57.0",
 		"hashFiles('go.sum', 'web/package-lock.json')",
+		"go mod download",
+		"if: always()",
 	} {
 		requireContains(t, s, want)
 	}
-	if strings.Index(s, "actions/cache@") > strings.Index(s, "make e2e-install") {
+	if strings.Index(s, "actions/cache/restore@") > strings.Index(s, "make e2e-install") {
 		t.Fatal("CI cache must be restored before dependency and browser installation")
+	}
+	if strings.Index(s, "actions/cache/save@") < strings.Index(s, "make e2e-install") || strings.Index(s, "actions/cache/save@") > strings.Index(s, "make release-gate") {
+		t.Fatal("CI cache must be saved after installation and before the fallible release gate")
 	}
 }
 

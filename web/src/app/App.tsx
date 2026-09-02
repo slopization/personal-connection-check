@@ -82,6 +82,24 @@ export async function closeRun(
     return false;
   }
 }
+export function downloadBlob(
+  blob: Blob,
+  doc: Document = document,
+  createObjectURL: (blob: Blob) => string = URL.createObjectURL.bind(URL),
+  revokeObjectURL: (url: string) => void = URL.revokeObjectURL.bind(URL),
+): void {
+  const href = createObjectURL(blob);
+  const anchor = doc.createElement("a");
+  anchor.href = href;
+  anchor.download = "connection-check.png";
+  doc.body.append(anchor);
+  try {
+    anchor.click();
+  } finally {
+    anchor.remove();
+    window.setTimeout(() => revokeObjectURL(href), 0);
+  }
+}
 export function App() {
   const [password, setPassword] = useState("");
   const [logged, setLogged] = useState(false);
@@ -197,11 +215,7 @@ export function App() {
       title: t.title,
       methodology: t.methodology,
     });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(b);
-    a.download = "connection-check.png";
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 0);
+    downloadBlob(b);
   }
   if (!logged)
     return (
