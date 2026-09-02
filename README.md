@@ -1,5 +1,8 @@
 # Personal Connection Check
 
+> [!WARNING]
+> This entire codebase was written by AI. No warranty or support is provided; review it carefully and use it entirely at your own risk.
+
 An access-controlled, single-server web application for measuring the browser-to-server network path.
 
 - Adaptive parallel download and upload measurement
