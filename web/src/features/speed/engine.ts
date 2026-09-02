@@ -1,5 +1,9 @@
 export type Clock = { now(): number };
-export type Phase = { bytes: number; samples: number[] };
+export type Phase = {
+  bytes: number;
+  samples: number[];
+  incompleteStreams: number;
+};
 export type Transport = {
   now: () => number;
   download: (streams: number, signal: AbortSignal) => Promise<Phase>;
@@ -13,6 +17,7 @@ export type SpeedResult = {
   uploadMbps: number;
   durationMs: number;
   streams: number;
+  incompleteDownloadStreams: number;
 };
 
 export const DIRECTION_LIMIT_MS = 15_000;
@@ -31,7 +36,7 @@ export const stable = (w: number[], threshold = 0.05) =>
 // Transport samples are already decimal megabits per second.
 const rate = (samples: number[]) => median(samples.slice(1)) || median(samples);
 
-type Measured = { rate: number; streams: number };
+type Measured = { rate: number; streams: number; incompleteStreams: number };
 type Work = (streams: number, signal: AbortSignal) => Promise<Phase>;
 type UploadWork = (
   streams: number,
@@ -63,7 +68,7 @@ async function measureDirection(
   external?.addEventListener("abort", cancel, { once: true });
   const started = now();
   let previous = 0;
-  let result: Measured = { rate: 0, streams: 1 };
+  let result: Measured = { rate: 0, streams: 1, incompleteStreams: 0 };
 
   try {
     for (const streams of RAMP) {
@@ -71,7 +76,13 @@ async function measureDirection(
       if (ctl.signal.aborted) break;
       try {
         const phase = await Promise.race([work(streams, ctl.signal), stop]);
-        result = { rate: rate(phase.samples), streams };
+        result = {
+          rate: rate(phase.samples),
+          streams,
+          incompleteStreams:
+            result.incompleteStreams +
+            ("incompleteStreams" in phase ? phase.incompleteStreams : 0),
+        };
         const elapsed = now() - started;
         const marginal = previous > 0 && result.rate < previous * 1.05;
         previous = result.rate;
@@ -115,6 +126,7 @@ export async function runAdaptive(
     uploadMbps: upload.rate,
     durationMs: t.now() - started,
     streams: Math.max(download.streams, upload.streams),
+    incompleteDownloadStreams: download.incompleteStreams,
   };
 }
 
@@ -128,6 +140,7 @@ export async function adaptive(
     async (streams, directionSignal) => ({
       bytes: 0,
       samples: await run(streams, directionSignal),
+      incompleteStreams: 0,
     }),
     signal,
     DIRECTION_LIMIT_MS,

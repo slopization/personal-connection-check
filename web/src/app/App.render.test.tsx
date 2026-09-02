@@ -78,6 +78,18 @@ describe("stability restoration and Korean UI", () => {
     expect(host.textContent).not.toContain("No samples");
   });
 
+  it("renders an explicit partial-stream accuracy warning", async () => {
+    const { IncompleteDownloadWarning } = await import("./App");
+    const host = document.createElement("div");
+    document.body.append(host);
+
+    render(h(IncompleteDownloadWarning, { count: 2 }), host);
+
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain(
+      "다운로드 스트림 2개가 정상적으로 끝나지 않았습니다",
+    );
+  });
+
   it("warns desktop Safari without disabling measurement", async () => {
     const { clear } = await import("../storage/database");
     await clear();

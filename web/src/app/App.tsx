@@ -103,6 +103,27 @@ export function downloadBlob(
     }, 1000);
   }
 }
+export function warnIncompleteDownload(
+  incompleteStreams: number,
+  logger: (
+    message: string,
+    detail: { incompleteStreams: number },
+  ) => void = console.warn,
+): boolean {
+  if (incompleteStreams < 1) return false;
+  logger("Download measurement used partial stream snapshots", {
+    incompleteStreams,
+  });
+  return true;
+}
+export function IncompleteDownloadWarning({ count }: { count: number }) {
+  if (count < 1) return null;
+  return (
+    <p class="measurement-warning" role="alert">
+      {t.incompleteDownloadWarning(count)}
+    </p>
+  );
+}
 export function App() {
   const desktopSafari = isDesktopSafari();
   const [password, setPassword] = useState("");
@@ -172,6 +193,7 @@ export function App() {
         createBrowserTransport(run.id),
         ctl.signal,
       );
+      warnIncompleteDownload(value.incompleteDownloadStreams);
       if (await closeRun(run.id)) runID = undefined;
       setStatus(t.uploading);
       const stored: SpeedResult = {
@@ -182,6 +204,7 @@ export function App() {
         ip: info?.ip,
         isp: info?.isp,
         city: info?.city,
+        incompleteDownloadStreams: value.incompleteDownloadStreams,
       };
       await save(stored);
       let preparedPNG: Blob | undefined;
@@ -313,6 +336,9 @@ export function App() {
           {result && pngBlob && (
             <button onClick={() => downloadBlob(pngBlob)}>{t.png}</button>
           )}
+          <IncompleteDownloadWarning
+            count={result?.incompleteDownloadStreams ?? 0}
+          />
         </section>
       )}
       {tab === "stability" && (

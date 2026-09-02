@@ -22,11 +22,15 @@ describe("browser speed transport", () => {
     vi.useRealTimers();
   });
 
-  it("bounds a download when WebKit reader.read never settles", async () => {
+  it("snapshots partial bytes and marks a WebKit reader that never settles", async () => {
     vi.useFakeTimers();
     const cancel = vi.fn(async () => undefined);
+    let reads = 0;
     const reader = {
-      read: () => new Promise<never>(() => undefined),
+      read: () =>
+        reads++ === 0
+          ? Promise.resolve({ done: false, value: new Uint8Array(8) })
+          : new Promise<never>(() => undefined),
       cancel,
     } as unknown as ReadableStreamDefaultReader<Uint8Array>;
     const fetcher: typeof fetch = vi.fn(
@@ -36,7 +40,7 @@ describe("browser speed transport", () => {
           body: { getReader: () => reader },
         }) as unknown as Response,
     );
-    const transport = createBrowserTransport("run", fetcher, () => 0);
+    const transport = createBrowserTransport("run", fetcher, () => Date.now());
     let settled = false;
     const result = transport
       .download(1, new AbortController().signal)
@@ -45,11 +49,40 @@ describe("browser speed transport", () => {
         return value;
       });
 
-    await vi.advanceTimersByTimeAsync(1_250);
+    await vi.advanceTimersByTimeAsync(1_750);
     expect(settled).toBe(true);
-    expect((await result).bytes).toBe(0);
+    const snapshot = await result;
+    expect(snapshot).toMatchObject({ bytes: 8, incompleteStreams: 1 });
+    expect(snapshot.samples).toHaveLength(1);
+    expect(snapshot.samples[0]).toBeGreaterThan(0);
     expect(cancel).toHaveBeenCalledOnce();
     vi.useRealTimers();
+  });
+
+  it("aborts sibling download workers when one worker fails", async () => {
+    let calls = 0;
+    let siblingAborted = false;
+    const fetcher = vi.fn(
+      async (_url: RequestInfo | URL, init?: RequestInit) => {
+        if (calls++ === 0) return new Response(null, { status: 500 });
+        return new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener(
+            "abort",
+            () => {
+              siblingAborted = true;
+              reject(new DOMException("cancelled", "AbortError"));
+            },
+            { once: true },
+          );
+        });
+      },
+    );
+    const transport = createBrowserTransport("run", fetcher, () => Date.now());
+
+    await expect(
+      transport.download(2, new AbortController().signal),
+    ).rejects.toThrow("download failed");
+    expect(siblingAborted).toBe(true);
   });
 
   it("uses parallel download readers and server acknowledged repeated upload chunks", async () => {
@@ -66,6 +99,7 @@ describe("browser speed transport", () => {
     const download = await transport.download(2, new AbortController().signal);
     const upload = await transport.upload(2, new AbortController().signal);
     expect(download.bytes).toBe(128);
+    expect(download.incompleteStreams).toBe(0);
     expect(upload.ackBytes).toBeGreaterThanOrEqual(64);
     expect(
       fetcher.mock.calls.filter(([url]) => String(url).includes("download")),

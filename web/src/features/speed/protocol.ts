@@ -7,6 +7,7 @@ type Fetcher = (
 const CHUNK = 1024 * 1024;
 const PHASE_MS = 1250;
 const DOWNLOAD_TIMEOUT_MS = PHASE_MS + 500;
+const DOWNLOAD_AGGREGATE_TIMEOUT_MS = DOWNLOAD_TIMEOUT_MS + 300;
 const MAX_UPLOAD_REQUESTS = 8;
 const mbps = (bytes: number, elapsed: number) =>
   elapsed > 0 ? (bytes * 8 * 1000) / elapsed / 1_000_000 : 0;
@@ -18,24 +19,40 @@ export function createBrowserTransport(
   now = () => performance.now(),
 ): Transport {
   const url = (path: string) => `/api/test-runs/${runID}/${path}`;
-  async function downloadWorker(parent: AbortSignal): Promise<Phase> {
+  async function downloadWorker(
+    parent: AbortSignal,
+    progress: {
+      bytes: number;
+      samples: number[];
+      incomplete: boolean;
+      settled: boolean;
+      frozen: boolean;
+    },
+  ): Promise<void> {
     const ctl = new AbortController();
-    const cancel = () => ctl.abort();
-    parent.addEventListener("abort", cancel, { once: true });
-    const timeout = window.setTimeout(cancel, DOWNLOAD_TIMEOUT_MS);
-    const phaseEnded = Symbol("phase ended");
-    let phaseTimeout: number | undefined;
-    const phaseStop = new Promise<typeof phaseEnded>((resolve) => {
-      phaseTimeout = window.setTimeout(() => {
-        cancel();
-        resolve(phaseEnded);
-      }, PHASE_MS);
+    const watchdogEnded = Symbol("download watchdog ended");
+    let endWatchdog!: () => void;
+    const watchdogStop = new Promise<typeof watchdogEnded>((resolve) => {
+      endWatchdog = () => resolve(watchdogEnded);
     });
+    const cancel = () => {
+      ctl.abort();
+      endWatchdog();
+    };
+    if (parent.aborted) cancel();
+    else parent.addEventListener("abort", cancel, { once: true });
+    const watchdog = window.setTimeout(cancel, DOWNLOAD_TIMEOUT_MS);
     const signal = ctl.signal;
     const started = now();
+    const markIncomplete = () => {
+      if (parent.aborted) return;
+      progress.incomplete = true;
+      if (!progress.frozen && progress.bytes > 0) {
+        const elapsed = now() - started;
+        progress.samples.push(mbps(progress.bytes, elapsed));
+      }
+    };
     let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
-    let bytes = 0;
-    const samples: number[] = [];
     let complete = false;
     try {
       const response = await Promise.race([
@@ -43,29 +60,34 @@ export function createBrowserTransport(
           `${url("download")}?nonce=${crypto.randomUUID()}&durationMs=${PHASE_MS}`,
           { signal, cache: "no-store" },
         ),
-        phaseStop,
+        watchdogStop,
       ]);
-      if (response === phaseEnded) return { bytes, samples };
+      if (response === watchdogEnded) {
+        markIncomplete();
+        return;
+      }
       if (!response.ok || !response.body) throw new Error("download failed");
       reader = response.body.getReader();
       for (;;) {
-        const x = await Promise.race([reader.read(), phaseStop]);
-        if (x === phaseEnded) break;
+        const x = await Promise.race([reader.read(), watchdogStop]);
+        if (x === watchdogEnded) {
+          markIncomplete();
+          break;
+        }
         if (x.done) {
           complete = true;
           break;
         }
-        bytes += x.value.byteLength;
+        if (!progress.frozen) progress.bytes += x.value.byteLength;
         const elapsed = now() - started;
-        if (elapsed >= (samples.length + 1) * 250)
-          samples.push(mbps(bytes, elapsed));
+        if (!progress.frozen && elapsed >= (progress.samples.length + 1) * 250)
+          progress.samples.push(mbps(progress.bytes, elapsed));
         if (elapsed >= PHASE_MS) break;
       }
     } catch (error) {
       if (!signal.aborted) throw error;
     } finally {
-      window.clearTimeout(timeout);
-      if (phaseTimeout !== undefined) window.clearTimeout(phaseTimeout);
+      window.clearTimeout(watchdog);
       parent.removeEventListener("abort", cancel);
       if (reader && !complete) {
         let drainTimeout: number | undefined;
@@ -77,8 +99,8 @@ export function createBrowserTransport(
         ]);
         if (drainTimeout !== undefined) window.clearTimeout(drainTimeout);
       }
+      progress.settled = true;
     }
-    return { bytes, samples };
   }
   async function uploadWorker(
     parent: AbortSignal,
@@ -138,12 +160,52 @@ export function createBrowserTransport(
   return {
     now,
     async download(streams, signal) {
-      const all = await Promise.all(
-        Array.from({ length: streams }, () => downloadWorker(signal)),
+      const phase = new AbortController();
+      const cancel = () => phase.abort();
+      if (signal.aborted) cancel();
+      else signal.addEventListener("abort", cancel, { once: true });
+      const progress = Array.from({ length: streams }, () => ({
+        bytes: 0,
+        samples: [] as number[],
+        incomplete: false,
+        settled: false,
+        frozen: false,
+      }));
+      const workers = progress.map((state) =>
+        downloadWorker(phase.signal, state),
       );
+      const all = Promise.all(workers);
+      const aggregateEnded = Symbol("download aggregate ended");
+      let aggregateTimeout: number | undefined;
+      const aggregateStop = new Promise<typeof aggregateEnded>((resolve) => {
+        aggregateTimeout = window.setTimeout(
+          () => resolve(aggregateEnded),
+          DOWNLOAD_AGGREGATE_TIMEOUT_MS,
+        );
+      });
+      let outcome: void[] | typeof aggregateEnded;
+      try {
+        outcome = await Promise.race([all, aggregateStop]);
+      } catch (error) {
+        for (const state of progress) state.frozen = true;
+        phase.abort();
+        void all.catch(() => undefined);
+        throw error;
+      } finally {
+        if (aggregateTimeout !== undefined)
+          window.clearTimeout(aggregateTimeout);
+        signal.removeEventListener("abort", cancel);
+      }
+      for (const state of progress) state.frozen = true;
+      if (outcome === aggregateEnded) {
+        phase.abort();
+        void all.catch(() => undefined);
+      }
       return {
-        bytes: all.reduce((n, x) => n + x.bytes, 0),
-        samples: all.flatMap((x) => x.samples),
+        bytes: progress.reduce((n, x) => n + x.bytes, 0),
+        samples: progress.flatMap((x) => x.samples),
+        incompleteStreams: progress.filter((x) => x.incomplete || !x.settled)
+          .length,
       };
     },
     async upload(streams, signal) {

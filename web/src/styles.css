@@ -36,7 +36,8 @@ section {
   margin-top: 18px;
   border-radius: 8px;
 }
-.browser-warning {
+.browser-warning,
+.measurement-warning {
   padding: 12px 14px;
   color: #fff4cf;
   background: #6b4f0b;

@@ -7,6 +7,7 @@ export type SpeedResult = {
   ip?: string;
   isp?: string;
   city?: string;
+  incompleteDownloadStreams?: number;
 };
 export type StabilitySession = {
   at: number;

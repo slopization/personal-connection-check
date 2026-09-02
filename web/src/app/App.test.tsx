@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { closeRun, downloadBlob, warmPing } from "./App";
+import {
+  closeRun,
+  downloadBlob,
+  warnIncompleteDownload,
+  warmPing,
+} from "./App";
 
 class PendingSocket {
   static instances: PendingSocket[] = [];
@@ -24,6 +29,20 @@ describe("run cleanup", () => {
       "/api/test-runs/run%2Fid",
       expect.objectContaining({ method: "DELETE", keepalive: true }),
     );
+  });
+});
+
+describe("incomplete download diagnostics", () => {
+  it("logs incomplete streams and reports whether a user warning is needed", () => {
+    const logger = vi.fn();
+
+    expect(warnIncompleteDownload(2, logger)).toBe(true);
+    expect(logger).toHaveBeenCalledWith(
+      "Download measurement used partial stream snapshots",
+      { incompleteStreams: 2 },
+    );
+    expect(warnIncompleteDownload(0, logger)).toBe(false);
+    expect(logger).toHaveBeenCalledOnce();
   });
 });
 

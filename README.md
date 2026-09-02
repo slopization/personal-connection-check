@@ -92,7 +92,7 @@ cd web && npm ci
 make check
 ```
 
-The full clean-runner release gate additionally installs Playwright browsers, runs desktop/mobile Chromium, desktop Firefox, and mobile WebKit E2E tests, builds the OCI image, and executes its read-only smoke test. Desktop Safari remains usable but unsupported because its streaming reader can remain pending after server EOF; the UI presents a non-blocking warning instead of disabling the test:
+The full clean-runner release gate additionally installs Playwright browsers, runs desktop/mobile Chromium, desktop Firefox, and desktop/mobile WebKit E2E tests, builds the OCI image, and executes its read-only smoke test. Safari remains usable but unsupported; a stalled WebKit reader is bounded, its partial bytes are retained, and the UI plus console disclose that the result may be conservative:
 
 ```sh
 make e2e-install

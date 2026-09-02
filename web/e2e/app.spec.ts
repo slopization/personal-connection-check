@@ -23,6 +23,7 @@ test("speed result includes upload and PNG download", async ({ page }) => {
   test.setTimeout(70_000);
   const failedResponses: string[] = [];
   const downloadAPIRequests: string[] = [];
+  const partialStreamLogs: string[] = [];
   let recordingDownload = false;
   page.on("response", (response) => {
     if (response.status() >= 400 && response.url().includes("/api/"))
@@ -33,6 +34,13 @@ test("speed result includes upload and PNG download", async ({ page }) => {
   page.on("request", (request) => {
     if (recordingDownload && request.url().includes("/api/"))
       downloadAPIRequests.push(new URL(request.url()).pathname);
+  });
+  page.on("console", (message) => {
+    if (
+      message.type() === "warning" &&
+      message.text().includes("partial stream snapshots")
+    )
+      partialStreamLogs.push(message.text());
   });
   await login(page);
   await page.getByRole("button", { name: /start test/i }).click();
@@ -45,6 +53,13 @@ test("speed result includes upload and PNG download", async ({ page }) => {
       JSON.stringify({ status: await status.textContent(), failedResponses }),
     );
     throw error;
+  }
+  const partialWarning = page.locator(".measurement-warning");
+  if (await partialWarning.count()) {
+    await expect(partialWarning).toContainText(/stream.*actual speed/i);
+    expect(partialStreamLogs).toHaveLength(1);
+  } else {
+    expect(partialStreamLogs).toEqual([]);
   }
   const download = page.waitForEvent("download", { timeout: 15_000 });
   recordingDownload = true;

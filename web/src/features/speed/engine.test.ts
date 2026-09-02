@@ -4,6 +4,7 @@ import { runAdaptive } from "./engine";
 const phase = (rate: number) => ({
   bytes: 125_000,
   samples: [rate, rate, rate],
+  incompleteStreams: 0,
 });
 
 describe("adaptive speed engine", () => {
@@ -41,6 +42,7 @@ describe("adaptive speed engine", () => {
     expect(result.downloadMbps).toBe(100);
     expect(result.uploadMbps).toBe(80);
     expect(result.durationMs).toBe(10_000);
+    expect(result.incompleteDownloadStreams).toBe(0);
   });
 
   it("gives download and upload independent bounded deadlines", async () => {
@@ -48,7 +50,11 @@ describe("adaptive speed engine", () => {
     const transport = {
       now: () => 0,
       download: (_streams: number, signal: AbortSignal) =>
-        new Promise<{ bytes: number; samples: number[] }>((resolve) => {
+        new Promise<{
+          bytes: number;
+          samples: number[];
+          incompleteStreams: number;
+        }>((resolve) => {
           signal.addEventListener(
             "abort",
             () => {
@@ -106,7 +112,11 @@ describe("adaptive speed engine", () => {
     const transport = {
       now: () => 0,
       download: (_streams: number, signal: AbortSignal) =>
-        new Promise<{ bytes: number; samples: number[] }>((_resolve, reject) =>
+        new Promise<{
+          bytes: number;
+          samples: number[];
+          incompleteStreams: number;
+        }>((_resolve, reject) =>
           signal.addEventListener(
             "abort",
             () => reject(new DOMException("cancelled", "AbortError")),
