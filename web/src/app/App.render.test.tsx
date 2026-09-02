@@ -22,12 +22,20 @@ async function loggedInApp(userAgent?: string) {
   }
   vi.stubGlobal(
     "fetch",
-    vi.fn(async () => new Response(JSON.stringify({ ip: "127.0.0.1" }))),
+    vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === "/api/auth/config") {
+        return new Response(
+          JSON.stringify({ password: true, oidc: false, footerMessage: "" }),
+        );
+      }
+      return new Response(JSON.stringify({ ip: "127.0.0.1" }));
+    }),
   );
   const { App } = await import("./App");
   const host = document.createElement("div");
   document.body.append(host);
   render(h(App, {}), host);
+  await vi.waitFor(() => expect(host.querySelector("button")).not.toBeNull());
   (host.querySelector("button") as HTMLButtonElement).click();
   await flush();
   return host;
@@ -76,6 +84,67 @@ describe("stability restoration and Korean UI", () => {
     expect(host.textContent).toContain("측정 일시정지");
     expect(host.textContent).toContain("샘플 없음");
     expect(host.textContent).not.toContain("No samples");
+  });
+
+  it("shows only OIDC login when shared-password authentication is disabled", async () => {
+    vi.resetModules();
+    Object.defineProperty(navigator, "language", {
+      configurable: true,
+      value: "ko-KR",
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        if (String(input) === "/api/auth/config") {
+          return new Response(
+            JSON.stringify({ password: false, oidc: true, footerMessage: "" }),
+          );
+        }
+        return new Response(null, { status: 401 });
+      }),
+    );
+    const { App } = await import("./App");
+    const host = document.createElement("div");
+    document.body.append(host);
+    render(h(App, {}), host);
+
+    await vi.waitFor(() =>
+      expect(
+        host.querySelector<HTMLAnchorElement>('a[href="/api/auth/oidc/begin"]'),
+      ).not.toBeNull(),
+    );
+    expect(host.querySelector('input[type="password"]')).toBeNull();
+    expect(host.textContent).not.toContain("공유 비밀번호");
+  });
+
+  it("restores an existing OIDC session after the callback redirect", async () => {
+    vi.resetModules();
+    Object.defineProperty(navigator, "language", {
+      configurable: true,
+      value: "ko-KR",
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === "/api/auth/config") {
+          return new Response(
+            JSON.stringify({ password: false, oidc: true, footerMessage: "" }),
+          );
+        }
+        if (url === "/api/network-info") {
+          return new Response(JSON.stringify({ ip: "127.0.0.1" }));
+        }
+        return new Response(null, { status: 404 });
+      }),
+    );
+    const { App } = await import("./App");
+    const host = document.createElement("div");
+    document.body.append(host);
+    render(h(App, {}), host);
+
+    await vi.waitFor(() => expect(host.textContent).toContain("측정 시작"));
+    expect(host.querySelector('a[href="/api/auth/oidc/begin"]')).toBeNull();
   });
 
   it("shows the configured footer message before and after login", async () => {

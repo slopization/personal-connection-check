@@ -27,4 +27,10 @@
 - RED: `go test ./internal/app -run TestAuthConfigPublishesFooterMessage -count=1` returned an empty message. GREEN: the same test passed after extending the public auth config response.
 - RED: the focused render test found no footer or attribution link. GREEN: it passed with plain-text rendering, safe HTTP(S) linkification, and the configured message visible before and after login.
 
+## OIDC-only login and startup observability (2026-09-03)
+
+- RED: `npm test -- --run src/app/App.render.test.tsx` found no OIDC login link and showed the shared-password form even when `/api/auth/config` returned `password:false, oidc:true`. GREEN: the focused render suite passes with auth-mode-aware controls.
+- RED: the callback-session render test remained on the OIDC login screen after a valid `/api/network-info` response. GREEN: the frontend restores an existing OIDC session after the callback redirect.
+- RED: `go test ./cmd/pcc -run TestStartupMessageReportsAuthModesWithoutConfigurationValues -count=1` failed because no startup summary existed. GREEN: startup is logged only after OIDC initialization and listener binding, with authentication booleans and no configuration values.
+
 External validation is required for each revision because local Playwright binaries and a Docker daemon are unavailable. Forgejo CI provides multi-engine E2E, container smoke, registry push/pull, and digest evidence.

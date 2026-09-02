@@ -20,7 +20,7 @@ import {
 } from "../features/stability/StabilityChart";
 const t = text[language()];
 type Info = { ip: string; city?: string; isp?: string; country?: string };
-type AuthConfig = { footerMessage?: string };
+type AuthConfig = { password: boolean; oidc: boolean; footerMessage?: string };
 type Net = {
   type?: string;
   effectiveType?: string;
@@ -152,6 +152,7 @@ export function App() {
   const [monitoring, setMonitoring] = useState(false);
   const [chartRange, setChartRange] = useState<ChartRange>("10m");
   const [footerMessage, setFooterMessage] = useState("");
+  const [authConfig, setAuthConfig] = useState<AuthConfig>();
   const runCtl = useRef<AbortController>();
   const monitor = useRef<StabilityMonitor>();
   const network = (navigator as Navigator & { connection?: Net }).connection;
@@ -177,8 +178,25 @@ export function App() {
     void fetch("/api/auth/config")
       .then((response) => response.json() as Promise<AuthConfig>)
       .then((config) => {
-        if (active && typeof config.footerMessage === "string")
-          setFooterMessage(config.footerMessage);
+        if (active) {
+          setAuthConfig(config);
+          if (typeof config.footerMessage === "string")
+            setFooterMessage(config.footerMessage);
+          if (config.oidc) {
+            void fetch("/api/network-info")
+              .then((response) => {
+                if (!response.ok) throw new Error("no active session");
+                return response.json() as Promise<Info>;
+              })
+              .then((restoredInfo) => {
+                if (active) {
+                  setInfo(restoredInfo);
+                  setLogged(true);
+                }
+              })
+              .catch(() => undefined);
+          }
+        }
       })
       .catch(() => undefined);
     return () => {
@@ -285,16 +303,23 @@ export function App() {
             {t.webKitWarning}
           </p>
         )}
-        <label>
-          {t.password}
-          <input
-            aria-label={t.password}
-            type="password"
-            value={password}
-            onInput={(e) => setPassword((e.target as HTMLInputElement).value)}
-          />
-        </label>
-        <button onClick={login}>{t.login}</button>
+        {authConfig?.password && (
+          <>
+            <label>
+              {t.password}
+              <input
+                aria-label={t.password}
+                type="password"
+                value={password}
+                onInput={(e) =>
+                  setPassword((e.target as HTMLInputElement).value)
+                }
+              />
+            </label>
+            <button onClick={login}>{t.login}</button>
+          </>
+        )}
+        {authConfig?.oidc && <a href="/api/auth/oidc/begin">{t.oidcLogin}</a>}
         <p role="alert">{status}</p>
         <FooterMessage message={footerMessage} />
       </main>

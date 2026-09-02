@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -60,17 +61,23 @@ func main() {
 		fmt.Fprintln(os.Stderr, e)
 		os.Exit(2)
 	}
-	fmt.Println("listening on", c.Listen)
 	a, e := app.New(app.Config{Runtime: c})
 	if e != nil {
 		fmt.Fprintln(os.Stderr, e)
 		os.Exit(2)
 	}
 	server := &http.Server{Addr: c.Listen, Handler: a, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 20 * time.Second, WriteTimeout: 25 * time.Second, IdleTimeout: 60 * time.Second}
+	listener, e := net.Listen("tcp", c.Listen)
+	if e != nil {
+		a.Close()
+		fmt.Fprintln(os.Stderr, e)
+		os.Exit(2)
+	}
+	fmt.Println(startupMessage(c))
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	errCh := make(chan error, 1)
-	go func() { errCh <- server.ListenAndServe() }()
+	go func() { errCh <- server.Serve(listener) }()
 	select {
 	case <-ctx.Done():
 		a.Close()
@@ -82,6 +89,15 @@ func main() {
 			panic(e)
 		}
 	}
+}
+
+func startupMessage(c config.Config) string {
+	return fmt.Sprintf(
+		"server started listen=%s auth_oidc=%t auth_shared_password=%t",
+		c.Listen,
+		c.OIDCIssuer != "",
+		c.PasswordHash != "",
+	)
 }
 
 func runHealthcheck(url string) error {

@@ -74,7 +74,9 @@ docker run --rm --read-only --tmpfs /tmp:rw,noexec,nosuid,size=16m \
 | `PCC_HEALTHCHECK_URL`        | No                     | `http://127.0.0.1:8080/healthz`        | URL used only by the image `healthcheck` command; shown value is the default                         |
 | `PCC_SMOKE_URL`              | No                     | `http://127.0.0.1:8080`                | Base URL used only by the release-test `smoke` command; shown value is the default                   |
 
-At least one complete authentication method is required: set `PCC_SHARED_PASSWORD_HASH`, or set all four OIDC variables marked **With OIDC**. OIDC startup fails closed when discovery or required configuration is invalid.
+At least one complete authentication method is required: set `PCC_SHARED_PASSWORD_HASH`, or set all four OIDC variables marked **With OIDC**. OIDC startup fails closed when discovery or required configuration is invalid. Omitting `PCC_SHARED_PASSWORD_HASH` disables shared-password login; there is no default or fallback password.
+
+After authentication initialization and listener binding succeed, the service writes a credential-free startup line such as `server started listen=:8080 auth_oidc=true auth_shared_password=false` to stdout.
 
 The OIDC callback path is fixed and requires no environment variable. Register the following exact redirect URI with the OIDC provider:
 

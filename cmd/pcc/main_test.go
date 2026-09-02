@@ -1,10 +1,36 @@
 package main
 
 import (
+	"codeberg.org/modelgarden/personal-connection-check/internal/config"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
+
+func TestStartupMessageReportsAuthModesWithoutConfigurationValues(t *testing.T) {
+	c := config.Config{
+		Listen:           ":8080",
+		OIDCIssuer:       "https://idp.example.com/oidc",
+		OIDCClientSecret: "must-not-appear",
+	}
+	got := startupMessage(c)
+	for _, want := range []string{
+		"server started",
+		"listen=:8080",
+		"auth_oidc=true",
+		"auth_shared_password=false",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("startupMessage() = %q, missing %q", got, want)
+		}
+	}
+	for _, secret := range []string{c.OIDCIssuer, c.OIDCClientSecret} {
+		if strings.Contains(got, secret) {
+			t.Fatalf("startupMessage() exposed configuration value %q", secret)
+		}
+	}
+}
 
 func TestRunHealthcheck(t *testing.T) {
 	good := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

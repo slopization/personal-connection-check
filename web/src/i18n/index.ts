@@ -8,6 +8,7 @@ export type Copy = {
   cancel: string;
   password: string;
   login: string;
+  oidcLogin: string;
   loginFailed: string;
   pinging: string;
   downloading: string;
@@ -47,6 +48,7 @@ export const text: Record<Language, Copy> = {
     cancel: "Cancel",
     password: "Shared password",
     login: "Sign in",
+    oidcLogin: "Sign in with OIDC",
     loginFailed: "Sign-in failed",
     pinging: "Measuring ping…",
     downloading: "Downloading…",
@@ -86,6 +88,7 @@ export const text: Record<Language, Copy> = {
     cancel: "취소",
     password: "공유 비밀번호",
     login: "로그인",
+    oidcLogin: "OIDC로 로그인",
     loginFailed: "로그인에 실패했습니다",
     pinging: "핑 측정 중…",
     downloading: "다운로드 중…",
