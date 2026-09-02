@@ -13,7 +13,7 @@ This guide deploys one Personal Connection Check instance behind the Traefik ing
 - A TLS Secret named `pcc-tls`, created manually or by cert-manager
 - Bash, OpenSSL, and Docker on the administration machine for secret generation
 
-Use an immutable `sha-<12>` image tag for a stable deployment. The examples use `sha-cbed2b5d4c26`; replace it when selecting another verified revision.
+Use an immutable `sha-<12>` image tag for a stable deployment. The examples use `sha-12aaeff2522d`; replace it when selecting another verified revision.
 
 ## 2. Create the authentication Secret
 
@@ -23,7 +23,7 @@ The password is read from standard input and is never placed in a process argume
 set -euo pipefail
 kubectl create namespace pcc --dry-run=client -o yaml | kubectl apply -f -
 
-IMAGE='git.kyu.sh/modelgarden/personal-connection-check:sha-cbed2b5d4c26'
+IMAGE='git.kyu.sh/modelgarden/personal-connection-check:sha-12aaeff2522d'
 secret_dir="$(mktemp -d)"
 chmod 700 "$secret_dir"
 trap 'rm -rf "$secret_dir"; unset PASSWORD' EXIT
@@ -74,7 +74,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: pcc
-          image: git.kyu.sh/modelgarden/personal-connection-check:sha-cbed2b5d4c26
+          image: git.kyu.sh/modelgarden/personal-connection-check:sha-12aaeff2522d
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
