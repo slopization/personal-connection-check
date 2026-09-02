@@ -1,7 +1,6 @@
 name: container
 on:
   push:
-    branches: [main]
     tags: ["v*"]
 jobs:
   publish:
@@ -22,6 +21,7 @@ jobs:
           IMAGE: git.kyu.sh/modelgarden/personal-connection-check
         run: |
           set -euo pipefail
+          echo "$GITHUB_REF" | grep -Eq '^refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$'
           docker pull "$IMAGE:latest" || true
           DOCKER_BUILDKIT=1 docker build --cache-from "$IMAGE:latest" --build-arg BUILDKIT_INLINE_CACHE=1 --label org.opencontainers.image.source=https://git.kyu.sh/modelgarden/personal-connection-check --label org.opencontainers.image.revision="$GITHUB_SHA" --label org.opencontainers.image.licenses=MIT -t "$IMAGE:sha-${GITHUB_SHA:0:12}" .
           make container-smoke IMAGE="$IMAGE:sha-${GITHUB_SHA:0:12}"
@@ -36,15 +36,11 @@ jobs:
           test -n "${PACKAGE_TOKEN:-}"
           echo "$PACKAGE_TOKEN" | docker login git.kyu.sh -u kyush-ci --password-stdin
           docker push "$IMAGE:sha-${GITHUB_SHA:0:12}"
-          if [ "$GITHUB_REF" = "refs/heads/main" ]; then
-            docker tag "$IMAGE:sha-${GITHUB_SHA:0:12}" "$IMAGE:latest"
-            docker push "$IMAGE:latest"
-          fi
-          if echo "$GITHUB_REF" | grep -Eq '^refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$'; then
-            tag="${GITHUB_REF#refs/tags/}"
-            docker tag "$IMAGE:sha-${GITHUB_SHA:0:12}" "$IMAGE:$tag"
-            docker push "$IMAGE:$tag"
-          fi
+          tag="${GITHUB_REF#refs/tags/}"
+          docker tag "$IMAGE:sha-${GITHUB_SHA:0:12}" "$IMAGE:$tag"
+          docker push "$IMAGE:$tag"
+          docker tag "$IMAGE:sha-${GITHUB_SHA:0:12}" "$IMAGE:latest"
+          docker push "$IMAGE:latest"
           docker pull "$IMAGE:sha-${GITHUB_SHA:0:12}"
           digest="$(docker inspect --format='{{join .RepoDigests "\n"}}' "$IMAGE:sha-${GITHUB_SHA:0:12}" | awk '/@sha256:/ {print; exit}')"
           test -n "$digest"

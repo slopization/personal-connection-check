@@ -72,13 +72,16 @@ func TestMakeReleaseGateContract(t *testing.T) {
 	}
 }
 
-func TestCIInvokesReleaseGateAfterBrowserInstall(t *testing.T) {
+func TestCIInvokesChecksAndE2EAfterBrowserInstall(t *testing.T) {
 	s := read(t, "../../.forgejo/workflows/ci.yml")
-	for _, want := range []string{"git checkout --detach \"$GITHUB_SHA\"", "GITHUB_SHA", "GITHUB_PATH", "/usr/local/go/bin", "make e2e-install", "make release-gate"} {
+	for _, want := range []string{"git checkout --detach \"$GITHUB_SHA\"", "GITHUB_SHA", "GITHUB_PATH", "/usr/local/go/bin", "make e2e-install", "make check e2e"} {
 		requireContains(t, s, want)
 	}
-	if strings.Index(s, "make e2e-install") > strings.Index(s, "make release-gate") {
-		t.Fatal("CI must install Playwright browsers before release-gate")
+	if strings.Contains(s, "make release-gate") || strings.Contains(s, "docker build") {
+		t.Fatal("push and pull-request CI must not build a container image")
+	}
+	if strings.Index(s, "make e2e-install") > strings.Index(s, "make check e2e") {
+		t.Fatal("CI must install Playwright browsers before checks and E2E")
 	}
 }
 
@@ -102,8 +105,8 @@ func TestCICacheUsesPinnedForgejoActionAndVersionedPaths(t *testing.T) {
 	if strings.Index(s, "actions/cache/restore@") > strings.Index(s, "make e2e-install") {
 		t.Fatal("CI cache must be restored before dependency and browser installation")
 	}
-	if strings.Index(s, "actions/cache/save@") < strings.Index(s, "make e2e-install") || strings.Index(s, "actions/cache/save@") > strings.Index(s, "make release-gate") {
-		t.Fatal("CI cache must be saved after installation and before the fallible release gate")
+	if strings.Index(s, "actions/cache/save@") < strings.Index(s, "make e2e-install") || strings.Index(s, "actions/cache/save@") > strings.Index(s, "make check e2e") {
+		t.Fatal("CI cache must be saved after installation and before checks and E2E")
 	}
 }
 
@@ -115,8 +118,10 @@ func TestPlaywrightSerializesProjectsAgainstGlobalLimits(t *testing.T) {
 func TestContainerWorkflowContract(t *testing.T) {
 	s := read(t, "../../.forgejo/workflows/container.yml")
 	for _, want := range []string{
+		"tags: [\"v*\"]",
 		"git checkout --detach \"$GITHUB_SHA\"",
 		"set -euo pipefail",
+		"^refs/tags/v[0-9]+\\.[0-9]+\\.[0-9]+$",
 		"docker build",
 		"docker pull \"$IMAGE:latest\" || true",
 		"--cache-from \"$IMAGE:latest\"",
@@ -133,10 +138,14 @@ func TestContainerWorkflowContract(t *testing.T) {
 		"image_digest:",
 		"echo \"$PACKAGE_TOKEN\" | docker login git.kyu.sh -u kyush-ci --password-stdin",
 		"PACKAGE_TOKEN: ${{ secrets.PACKAGE_TOKEN }}",
-		"refs/heads/main",
-		"^refs/tags/v[0-9]+\\.[0-9]+\\.[0-9]+$",
 	} {
 		requireContains(t, s, want)
+	}
+	if strings.Contains(s, "branches:") || strings.Contains(s, "refs/heads/main") {
+		t.Fatal("container workflow must run only for version tags")
+	}
+	if strings.Index(s, "^refs/tags/v[0-9]+\\.[0-9]+\\.[0-9]+$") > strings.Index(s, "docker build") {
+		t.Fatal("version tag must be validated before the container build")
 	}
 	if strings.Contains(s, "REGISTRY_TOKEN:") || strings.Contains(s, "FORGEJO_TOKEN") || strings.Contains(s, "actions/") {
 		t.Fatal("workflow must use only the dedicated PACKAGE_TOKEN and avoid job-token package publishing or third-party actions")

@@ -54,4 +54,4 @@ jobs:
             ~/go/pkg/mod
             ~/.npm
           key: pcc-${{ runner.os }}-go1.27.1-node26.0.0-playwright1.57.0-${{ hashFiles('go.sum', 'web/package-lock.json') }}
-      - run: make release-gate
+      - run: make check e2e
