@@ -6,6 +6,7 @@ import (
 	"codeberg.org/modelgarden/personal-connection-check/internal/config"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -88,6 +89,82 @@ func TestLoginReturns429WhenGlobalVerifierIsSaturated(t *testing.T) {
 	a.ServeHTTP(w, req)
 	if w.Code != http.StatusTooManyRequests {
 		t.Fatalf("status=%d", w.Code)
+	}
+}
+
+func TestUploadDeadlineIsIndependentOfWholeRunTTL(t *testing.T) {
+	now := time.Unix(1_000, 0)
+	if got, want := uploadDeadline(now, now.Add(40*time.Second)), now.Add(2*time.Second); !got.Equal(want) {
+		t.Fatalf("upload deadline = %v, want %v", got, want)
+	}
+	if got, want := uploadDeadline(now, now.Add(time.Second)), now.Add(time.Second); !got.Equal(want) {
+		t.Fatalf("upload deadline past run expiry = %v, want %v", got, want)
+	}
+}
+
+type orderedBody struct{ events *[]string }
+
+func (b orderedBody) Close() error {
+	*b.events = append(*b.events, "body-close")
+	return nil
+}
+
+type deadlineWriter struct {
+	header http.Header
+	events *[]string
+}
+
+func (w *deadlineWriter) Header() http.Header       { return w.header }
+func (w *deadlineWriter) Write([]byte) (int, error) { return 0, nil }
+func (w *deadlineWriter) WriteHeader(int)           {}
+func (w *deadlineWriter) SetReadDeadline(time.Time) error {
+	*w.events = append(*w.events, "deadline-reset")
+	return nil
+}
+
+func TestFinishUploadKeepsDeadlineThroughBodyClose(t *testing.T) {
+	events := []string{}
+	w := &deadlineWriter{header: http.Header{}, events: &events}
+	finishUpload(orderedBody{events: &events}, http.NewResponseController(w), func() {
+		events = append(events, "release")
+	})
+	want := []string{"body-close", "deadline-reset", "release"}
+	if !reflect.DeepEqual(events, want) {
+		t.Fatalf("cleanup order = %v, want %v", events, want)
+	}
+}
+
+func TestFinishWatchedUploadJoinsCancellationBeforeCleanup(t *testing.T) {
+	events := []string{}
+	stop := make(chan struct{})
+	watcherResult := make(chan bool, 1)
+	go func() {
+		<-stop
+		events = append(events, "watch-stopped")
+		watcherResult <- false
+	}()
+	w := &deadlineWriter{header: http.Header{}, events: &events}
+	finishWatchedUpload(stop, watcherResult, orderedBody{events: &events}, http.NewResponseController(w), func() {
+		events = append(events, "release")
+	})
+	want := []string{"watch-stopped", "body-close", "deadline-reset", "release"}
+	if !reflect.DeepEqual(events, want) {
+		t.Fatalf("watched cleanup order = %v, want %v", events, want)
+	}
+}
+
+func TestFinishWatchedUploadDoesNotCloseBodyTwiceAfterCancellation(t *testing.T) {
+	events := []string{"watcher-body-close"}
+	stop := make(chan struct{})
+	watcherResult := make(chan bool, 1)
+	watcherResult <- true
+	w := &deadlineWriter{header: http.Header{}, events: &events}
+	finishWatchedUpload(stop, watcherResult, orderedBody{events: &events}, http.NewResponseController(w), func() {
+		events = append(events, "release")
+	})
+	want := []string{"watcher-body-close", "deadline-reset", "release"}
+	if !reflect.DeepEqual(events, want) {
+		t.Fatalf("cancelled cleanup order = %v, want %v", events, want)
 	}
 }
 

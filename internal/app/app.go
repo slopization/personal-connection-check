@@ -44,9 +44,34 @@ type App struct {
 var oidcDiscoveryTimeout = 5 * time.Second
 
 const runCleanupMargin = 10 * time.Second
+const uploadRequestTimeout = 2 * time.Second
 
 func runTTL(directionLimit time.Duration) time.Duration {
 	return 2*directionLimit + runCleanupMargin
+}
+
+func uploadDeadline(now, runExpiry time.Time) time.Time {
+	deadline := now.Add(uploadRequestTimeout)
+	if runExpiry.Before(deadline) {
+		return runExpiry
+	}
+	return deadline
+}
+
+func finishUpload(body io.Closer, rc *http.ResponseController, release func()) {
+	_ = body.Close()
+	_ = rc.SetReadDeadline(time.Time{})
+	release()
+}
+
+func finishWatchedUpload(stop chan struct{}, watcherResult <-chan bool, body io.Closer, rc *http.ResponseController, release func()) {
+	close(stop)
+	if !<-watcherResult {
+		finishUpload(body, rc, release)
+		return
+	}
+	_ = rc.SetReadDeadline(time.Time{})
+	release()
 }
 
 func New(c Config) (*App, error) {
@@ -326,21 +351,23 @@ func (a *App) upload(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not found", 404)
 		return
 	}
-	defer x.Release()
-	defer r.Body.Close()
 	rc := http.NewResponseController(w)
-	_ = rc.SetReadDeadline(x.Expires)
-	defer rc.SetReadDeadline(time.Time{})
-	done := make(chan struct{})
+	_ = rc.SetReadDeadline(uploadDeadline(time.Now(), x.Expires))
+	r.Body = http.MaxBytesReader(w, r.Body, a.cfg.UploadLimit)
+	body := r.Body
+	stopWatcher := make(chan struct{})
+	watcherResult := make(chan bool, 1)
 	go func() {
+		closedBody := false
 		select {
 		case <-x.Context().Done():
-			r.Body.Close()
-		case <-done:
+			_ = body.Close()
+			closedBody = true
+		case <-stopWatcher:
 		}
+		watcherResult <- closedBody
 	}()
-	defer close(done)
-	r.Body = http.MaxBytesReader(w, r.Body, a.cfg.UploadLimit)
+	defer finishWatchedUpload(stopWatcher, watcherResult, body, rc, x.Release)
 	start := time.Now()
 	n, e := io.Copy(io.Discard, &contextReader{r: r.Body, ctx: x.Context()})
 	if e != nil {
