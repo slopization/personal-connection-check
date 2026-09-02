@@ -13,7 +13,7 @@ This guide deploys one Personal Connection Check instance behind a WebSocket-cap
 - A TLS Secret named `pcc-tls`, created manually or by cert-manager
 - Bash, OpenSSL, and Docker on the administration machine for credential generation
 
-Use a fixed version tag for a stable deployment. The examples use `v1.0.4`; replace it when selecting another verified release.
+Use a fixed version tag for a stable deployment. The examples use `v1.0.5`; replace it when selecting another verified release.
 
 ## 2. Create the authentication Secret
 
@@ -21,7 +21,7 @@ For shared-password authentication, generate the password hash with the publishe
 
 ```bash
 read -rsp 'Shared password: ' PASSWORD; printf '\n'
-printf '%s\n' "$PASSWORD" | docker run --rm -i git.kyu.sh/modelgarden/personal-connection-check:v1.0.4 hash-password; unset PASSWORD
+printf '%s\n' "$PASSWORD" | docker run --rm -i git.kyu.sh/modelgarden/personal-connection-check:v1.0.5 hash-password; unset PASSWORD
 ```
 
 Generate the session key separately:
@@ -106,7 +106,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: pcc
-          image: git.kyu.sh/modelgarden/personal-connection-check:v1.0.4
+          image: git.kyu.sh/modelgarden/personal-connection-check:v1.0.5
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -225,9 +225,8 @@ OIDC denial events use `event=auth_login_denied`, `method=oidc`, and one bounded
 - `token_exchange`: authorization-code or PKCE exchange failed; verify the client secret and callback URI.
 - `id_token_missing`: the token endpoint returned no ID token.
 - `id_token_verification`: signature, issuer, audience, or expiry validation failed.
-- `claims`: the ID token claims could not be decoded with the required JSON types, including a non-Boolean `email_verified`.
+- `claims`: the ID token claims could not be decoded with the required JSON types.
 - `nonce`: the ID token nonce did not match the login state.
-- `email_unverified`: `email_verified` was absent or false.
 - `email_not_allowed`: the normalized ID token email was empty or absent from `PCC_OIDC_EMAIL_ALLOWLIST`.
 - `authorized_party`: a present `azp` claim did not match `PCC_OIDC_CLIENT_ID`.
 

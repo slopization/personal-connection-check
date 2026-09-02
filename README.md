@@ -61,7 +61,7 @@ docker run --rm --read-only --tmpfs /tmp:rw,noexec,nosuid,size=16m \
 | `PCC_OIDC_ISSUER`            | With OIDC              | `https://idp.example.com/oidc`         | OIDC discovery issuer                                                                                |
 | `PCC_OIDC_CLIENT_ID`         | With OIDC              | `pcc`                                  | OIDC client ID                                                                                       |
 | `PCC_OIDC_CLIENT_SECRET`     | With OIDC              | `<OIDC client secret>`                 | OIDC client secret                                                                                   |
-| `PCC_OIDC_EMAIL_ALLOWLIST`   | With OIDC              | `alice@example.com,bob@example.com`    | Comma-separated allowed email addresses; each ID token must contain `email_verified=true`            |
+| `PCC_OIDC_EMAIL_ALLOWLIST`   | With OIDC              | `alice@example.com,bob@example.com`    | Comma-separated allowed ID token email addresses                                                      |
 | `PCC_LISTEN`                 | No                     | `:8080`                                | Listen address; default `:8080`                                                                      |
 | `PCC_TRUSTED_PROXY_CIDRS`    | No                     | `192.0.2.10/32`                        | Comma-separated actual ingress proxy networks; default trusts none                                   |
 | `PCC_MAX_RUNS`               | No                     | `2`                                    | Maximum concurrent test runs; default `2`                                                            |

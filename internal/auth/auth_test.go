@@ -84,7 +84,6 @@ func TestOIDCCallbackRejectsInvalidSecurityClaims(t *testing.T) {
 		{"expiry", func(c map[string]any, _ *url.Values) { c["exp"] = time.Now().Add(-time.Minute).Unix() }},
 		{"state", func(_ map[string]any, q *url.Values) { q.Set("state", "wrong") }},
 		{"nonce", func(c map[string]any, _ *url.Values) { c["nonce"] = "wrong" }},
-		{"email_verified", func(c map[string]any, _ *url.Values) { c["email_verified"] = false }},
 		{"allowlist", func(c map[string]any, _ *url.Values) { c["email"] = "not-allowed@example.com" }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -100,7 +99,7 @@ func TestOIDCCallbackRejectsInvalidSecurityClaims(t *testing.T) {
 				t.Fatal(err)
 			}
 			q, _ := url.Parse(u)
-			claims := map[string]any{"iss": h.URL, "sub": "subject", "aud": "client", "exp": time.Now().Add(time.Minute).Unix(), "nonce": q.Query().Get("nonce"), "email": "allowed@example.com", "email_verified": true}
+			claims := map[string]any{"iss": h.URL, "sub": "subject", "aud": "client", "exp": time.Now().Add(time.Minute).Unix(), "nonce": q.Query().Get("nonce"), "email": "allowed@example.com"}
 			callbackQ := q.Query()
 			tc.mutate(claims, &callbackQ)
 			h.claims = claims
@@ -131,7 +130,7 @@ func TestOIDCCallbackUsesPKCEAndAcceptsValidAllowedEmail(t *testing.T) {
 		t.Fatal("PKCE S256 omitted")
 	}
 	h.expectedChallenge = q.Query().Get("code_challenge")
-	h.claims = map[string]any{"iss": h.URL, "sub": "subject", "aud": "client", "exp": time.Now().Add(time.Minute).Unix(), "nonce": q.Query().Get("nonce"), "email": "allowed@example.com", "email_verified": true}
+	h.claims = map[string]any{"iss": h.URL, "sub": "subject", "aud": "client", "exp": time.Now().Add(time.Minute).Unix(), "nonce": q.Query().Get("nonce"), "email": "allowed@example.com"}
 	callbackQ := q.Query()
 	callbackQ.Set("code", "code")
 	req := httptest.NewRequest(http.MethodGet, "/callback?"+callbackQ.Encode(), nil)

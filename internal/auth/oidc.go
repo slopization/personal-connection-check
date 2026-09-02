@@ -96,7 +96,6 @@ func (o *OIDC) Callback(w http.ResponseWriter, r *http.Request) (string, error) 
 	}
 	var cl struct {
 		Email           string `json:"email"`
-		EmailVerified   bool   `json:"email_verified"`
 		Nonce           string `json:"nonce"`
 		AuthorizedParty string `json:"azp"`
 	}
@@ -105,9 +104,6 @@ func (o *OIDC) Callback(w http.ResponseWriter, r *http.Request) (string, error) 
 	}
 	if cl.Nonce != st.SessionID {
 		return "", oidcFailed("nonce")
-	}
-	if !cl.EmailVerified {
-		return "", oidcFailed("email_unverified")
 	}
 	email := strings.ToLower(strings.TrimSpace(cl.Email))
 	if email == "" || !o.Emails[email] {
