@@ -39,3 +39,13 @@ func TestLoadOnlyAllowsHTTPPublicOriginOnLoopback(t *testing.T) {
 		})
 	}
 }
+
+func TestLoadRejectsSessionKeysThatAESCannotUse(t *testing.T) {
+	t.Setenv("PCC_SHARED_PASSWORD_HASH", "$argon2id$v=19$m=8192,t=1,p=1$MDEyMzQ1Njc4OWFiY2RlZg$MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY")
+	t.Setenv("PCC_SESSION_KEYS", base64.RawURLEncoding.EncodeToString(make([]byte, 48)))
+	t.Setenv("PCC_PUBLIC_ORIGIN", "https://connection.example.com")
+	_, err := Load()
+	if err == nil || !strings.Contains(err.Error(), "session key") {
+		t.Fatalf("Load() error = %v, want unusable AES key rejection", err)
+	}
+}

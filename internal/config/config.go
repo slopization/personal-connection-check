@@ -49,7 +49,7 @@ func Load() (Config, error) {
 			continue
 		}
 		k, e := base64.RawURLEncoding.DecodeString(raw)
-		if e != nil || len(k) < 32 {
+		if e != nil || len(k) != 32 {
 			return c, fmt.Errorf("invalid session key")
 		}
 		c.SessionKeys = append(c.SessionKeys, k)
