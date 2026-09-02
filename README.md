@@ -102,7 +102,7 @@ make e2e-install
 make release-gate
 ```
 
-See `docs/measurement-methodology.md`, `docs/security.md`, and `docs/tdd-evidence.md` for measurement semantics, security boundaries, and RED/GREEN evidence.
+See `docs/k3s-deployment.md`, `docs/measurement-methodology.md`, `docs/security.md`, and `docs/tdd-evidence.md` for deployment, measurement semantics, security boundaries, and RED/GREEN evidence.
 
 ## License
 
