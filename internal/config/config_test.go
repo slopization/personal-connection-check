@@ -40,6 +40,23 @@ func TestLoadOnlyAllowsHTTPPublicOriginOnLoopback(t *testing.T) {
 	}
 }
 
+func TestLoadBuildsOIDCRedirectFromPublicOrigin(t *testing.T) {
+	t.Setenv("PCC_OIDC_ISSUER", "https://idp.example.com/oidc")
+	t.Setenv("PCC_OIDC_CLIENT_ID", "pcc-client")
+	t.Setenv("PCC_OIDC_CLIENT_SECRET", "test-only-secret")
+	t.Setenv("PCC_OIDC_EMAIL_ALLOWLIST", "admin@example.com")
+	t.Setenv("PCC_SESSION_KEYS", base64.RawURLEncoding.EncodeToString(make([]byte, 32)))
+	t.Setenv("PCC_PUBLIC_ORIGIN", "https://connection.example.com/")
+
+	c, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := c.OIDCRedirect, "https://connection.example.com/api/auth/oidc/callback"; got != want {
+		t.Fatalf("OIDCRedirect = %q, want %q", got, want)
+	}
+}
+
 func TestLoadRejectsSessionKeysThatAESCannotUse(t *testing.T) {
 	t.Setenv("PCC_SHARED_PASSWORD_HASH", "$argon2id$v=19$m=8192,t=1,p=1$MDEyMzQ1Njc4OWFiY2RlZg$MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY")
 	t.Setenv("PCC_SESSION_KEYS", base64.RawURLEncoding.EncodeToString(make([]byte, 48)))

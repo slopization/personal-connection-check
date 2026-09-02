@@ -1,13 +1,13 @@
-# k3s deployment
+# Kubernetes deployment
 
-This guide deploys one Personal Connection Check instance behind the Traefik ingress controller included with a default k3s installation.
+This guide deploys one Personal Connection Check instance behind a WebSocket-capable Kubernetes Ingress controller.
 
 > [!IMPORTANT]
-> The test measures the complete phone → DNS/proxy/VPN → ingress → application path. To measure the NAS path itself, avoid a CDN or externally proxied DNS record; use direct DNS, split DNS, or the intended VPN path.
+> The test measures the complete client → DNS/proxy/VPN → ingress → application path. To measure the origin path itself, avoid a CDN or externally proxied DNS record; use direct DNS, split DNS, or the intended VPN path.
 
 ## 1. Prerequisites
 
-- A working k3s cluster with Traefik or another WebSocket-capable ingress controller
+- A working Kubernetes cluster with a WebSocket-capable Ingress controller
 - `kubectl` access
 - A DNS name pointing to the ingress, such as `connection.example.com`
 - A TLS Secret named `pcc-tls`, created manually or by cert-manager
@@ -58,7 +58,7 @@ Keep the session key stable across restarts. Rotating it invalidates existing lo
 
 ## 3. Apply the workload
 
-Save the following as `pcc.yaml`. Replace all three occurrences of `connection.example.com` and confirm the image tag.
+Save the following as `pcc.yaml`. Replace all three occurrences of `connection.example.com`, replace `your-ingress-class` with the cluster's IngressClass name, and confirm the image tag.
 
 ```yaml
 apiVersion: apps/v1
@@ -146,11 +146,8 @@ kind: Ingress
 metadata:
   name: pcc
   namespace: pcc
-  annotations:
-    traefik.ingress.kubernetes.io/router.entrypoints: websecure
-    traefik.ingress.kubernetes.io/router.tls: "true"
 spec:
-  ingressClassName: traefik
+  ingressClassName: your-ingress-class
   tls:
     - hosts:
         - connection.example.com
@@ -173,11 +170,11 @@ kubectl apply -f pcc.yaml
 kubectl -n pcc rollout status deployment/pcc --timeout=120s
 ```
 
-Keep `replicas: 1`: measurement run state is in memory, and parallel streams must reach the same pod. Traefik handles WebSocket upgrades without a special middleware. Do not attach compression, buffering, or caching middleware to this route.
+Keep `replicas: 1`: measurement run state is in memory, and parallel streams must reach the same pod. Configure the selected Ingress controller to preserve WebSocket upgrades. Do not attach compression, buffering, or caching middleware to this route.
 
 The example intentionally omits a CPU limit because cgroup throttling can become the measured bottleneck on fast links. Add a CPU limit only after confirming that it does not cap the expected throughput.
 
-`PCC_TRUSTED_PROXY_CIDRS` is intentionally omitted. The application remains safe but may display the Traefik peer address. Set it only to stable, verified ingress source CIDRs; never trust arbitrary client networks merely to recover `X-Forwarded-For`.
+`PCC_TRUSTED_PROXY_CIDRS` is intentionally omitted. The application remains safe but may display the Ingress peer address. Set it only to stable, verified ingress source CIDRs; never trust arbitrary client networks merely to recover `X-Forwarded-For`.
 
 ## 4. Verify and use
 
@@ -187,8 +184,8 @@ kubectl -n pcc logs deployment/pcc
 curl -fsS https://connection.example.com/healthz
 ```
 
-Open the HTTPS URL on the phone, sign in, and start a measurement. If the health check works but measurement fails, verify that no upstream proxy buffers or compresses responses and that its request timeout exceeds 25 seconds.
+Open the HTTPS URL on the client device, sign in, and start a measurement. If the health check works but measurement fails, verify that no upstream proxy buffers or compresses responses and that its request timeout exceeds 25 seconds.
 
-For optional offline city and ASN data, including a read-only k3s mount and the required attribution, see [`dbip.md`](dbip.md).
+For optional offline city and ASN data, including a read-only Kubernetes mount and the required attribution, see [`dbip.md`](dbip.md).
 
 To update, change the immutable image tag and run `kubectl apply -f pcc.yaml`; to remove everything, run `kubectl delete namespace pcc`.

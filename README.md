@@ -53,29 +53,36 @@ docker run --rm --read-only --tmpfs /tmp:rw,noexec,nosuid,size=16m \
 
 ## Configuration
 
-<!-- prettier-ignore -->
-| Variable | Purpose |
-| --- | --- |
-| `PCC_PUBLIC_ORIGIN` | Exact external origin used for Host, CSRF, and WebSocket origin checks |
-| `PCC_LISTEN` | Listen address; default `:8080` |
-| `PCC_SHARED_PASSWORD_HASH` | Argon2id PHC hash for shared-password login |
-| `PCC_SESSION_KEYS` | Comma-separated base64url AEAD keys; first key encrypts, remaining keys decrypt old sessions |
-| `PCC_OIDC_ISSUER` | OIDC discovery issuer |
-| `PCC_OIDC_CLIENT_ID` | OIDC client ID |
-| `PCC_OIDC_CLIENT_SECRET` | OIDC client secret |
-| `PCC_OIDC_REDIRECT_URI` | Exact OIDC callback URI |
-| `PCC_OIDC_EMAIL_ALLOWLIST` | Comma-separated allowed verified email addresses |
-| `PCC_TRUSTED_PROXY_CIDRS` | Comma-separated trusted ingress proxy networks |
-| `PCC_MAX_RUNS` | Maximum concurrent test runs; default `2` |
-| `PCC_MAX_STREAMS` | Maximum streams per run; default `8` |
-| `PCC_MAX_DIRECTION_DURATION` | Per-direction cap, at most `15s` |
-| `PCC_UPLOAD_LIMIT` | Maximum bytes accepted by one upload request |
-| `PCC_GEOIP_CITY_DB` | Optional local GeoIP City MMDB path |
-| `PCC_GEOIP_ASN_DB` | Optional local GeoIP ASN MMDB path |
-| `PCC_FOOTER_MESSAGE` | Optional public plain-text footer; HTTP(S) URLs become links |
-| `PCC_HEALTHCHECK_URL` | Optional URL used by the image healthcheck; default `http://127.0.0.1:8080/healthz` |
+| Variable                     | Required               | Example                                | Purpose / default                                                                                    |
+| ---------------------------- | ---------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `PCC_PUBLIC_ORIGIN`          | Yes                    | `https://connection.example.com`       | Exact external origin used for Host, CSRF, WebSocket origin, secure-cookie, and OIDC callback checks |
+| `PCC_SESSION_KEYS`           | Yes                    | `<32-byte base64url key>`              | Comma-separated AEAD keys; the first encrypts and remaining keys decrypt old sessions                |
+| `PCC_SHARED_PASSWORD_HASH`   | Unless OIDC is enabled | `<argon2id PHC hash>`                  | Enables shared-password login                                                                        |
+| `PCC_OIDC_ISSUER`            | With OIDC              | `https://idp.example.com/oidc`         | OIDC discovery issuer                                                                                |
+| `PCC_OIDC_CLIENT_ID`         | With OIDC              | `pcc`                                  | OIDC client ID                                                                                       |
+| `PCC_OIDC_CLIENT_SECRET`     | With OIDC              | `<OIDC client secret>`                 | OIDC client secret                                                                                   |
+| `PCC_OIDC_EMAIL_ALLOWLIST`   | With OIDC              | `alice@example.com,bob@example.com`    | Comma-separated allowed email addresses; each ID token must contain `email_verified=true`            |
+| `PCC_LISTEN`                 | No                     | `:8080`                                | Listen address; default `:8080`                                                                      |
+| `PCC_TRUSTED_PROXY_CIDRS`    | No                     | `192.0.2.10/32`                        | Comma-separated actual ingress proxy networks; default trusts none                                   |
+| `PCC_MAX_RUNS`               | No                     | `2`                                    | Maximum concurrent test runs; default `2`                                                            |
+| `PCC_MAX_STREAMS`            | No                     | `8`                                    | Maximum streams per run; default `8`, maximum `32`                                                   |
+| `PCC_MAX_DIRECTION_DURATION` | No                     | `15s`                                  | Per-direction cap; default and maximum `15s`                                                         |
+| `PCC_UPLOAD_LIMIT`           | No                     | `16777216`                             | Maximum bytes accepted by one upload request; default `16777216` (16 MiB)                            |
+| `PCC_GEOIP_CITY_DB`          | No                     | `/dbip/dbip-city-lite.mmdb`            | Local GeoIP City MMDB path; disabled when unset                                                      |
+| `PCC_GEOIP_ASN_DB`           | No                     | `/dbip/dbip-asn-lite.mmdb`             | Local GeoIP ASN MMDB path; disabled when unset                                                       |
+| `PCC_FOOTER_MESSAGE`         | No                     | `IP Geolocation by https://db-ip.com/` | Public plain-text footer; HTTP(S) URLs become links; default empty                                   |
+| `PCC_HEALTHCHECK_URL`        | No                     | `http://127.0.0.1:8080/healthz`        | URL used only by the image `healthcheck` command; shown value is the default                         |
+| `PCC_SMOKE_URL`              | No                     | `http://127.0.0.1:8080`                | Base URL used only by the release-test `smoke` command; shown value is the default                   |
 
-At least one complete authentication method is required. OIDC startup fails closed when discovery or required configuration is invalid. Allowed OIDC emails must have `email_verified=true`.
+At least one complete authentication method is required: set `PCC_SHARED_PASSWORD_HASH`, or set all four OIDC variables marked **With OIDC**. OIDC startup fails closed when discovery or required configuration is invalid.
+
+The OIDC callback path is fixed and requires no environment variable. Register the following exact redirect URI with the OIDC provider:
+
+```text
+https://connection.example.com/api/auth/oidc/callback
+```
+
+It is always derived as `PCC_PUBLIC_ORIGIN` + `/api/auth/oidc/callback`; replace the example origin with the service's actual public origin.
 
 ## Ingress requirements
 
@@ -104,7 +111,7 @@ make e2e-install
 make release-gate
 ```
 
-See `docs/k3s-deployment.md`, `docs/dbip.md`, `docs/measurement-methodology.md`, `docs/security.md`, and `docs/tdd-evidence.md` for deployment, optional DB-IP data, measurement semantics, security boundaries, and RED/GREEN evidence.
+See `docs/kubernetes-deployment.md`, `docs/dbip.md`, `docs/measurement-methodology.md`, `docs/security.md`, and `docs/tdd-evidence.md` for deployment, optional DB-IP data, measurement semantics, security boundaries, and RED/GREEN evidence.
 
 ## License
 

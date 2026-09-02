@@ -13,11 +13,11 @@ Download the MMDB variants manually. City Lite supplies approximate country and 
 
 Record the release month and the checksum shown on the DB-IP download page before installing the files. Keep the original compressed downloads, license information, and recorded checksums together so that the selected data can be audited later. Do not commit the databases to this repository.
 
-An example immutable layout on a single k3s node is:
+Prepare an immutable local staging directory such as:
 
 ```text
-/var/lib/pcc/dbip/2026-09/dbip-city-lite.mmdb
-/var/lib/pcc/dbip/2026-09/dbip-asn-lite.mmdb
+dbip-2026-09/dbip-city-lite.mmdb
+dbip-2026-09/dbip-asn-lite.mmdb
 ```
 
 Replace `2026-09` with the release you reviewed. Decompress the downloaded `.mmdb.gz` files, copy them into that directory, and make them readable but not writable by the application:
@@ -33,18 +33,18 @@ gzip -dc "dbip-asn-lite-$release.mmdb.gz" > "$work/dbip-asn-lite.mmdb"
 sha1sum "$work/dbip-city-lite.mmdb" "$work/dbip-asn-lite.mmdb"
 # Compare both outputs with the SHA-1 values on the official download pages.
 
-sudo install -d -m 0755 "/var/lib/pcc/dbip/$release"
-sudo install -m 0444 "$work/dbip-city-lite.mmdb" \
-  "/var/lib/pcc/dbip/$release/dbip-city-lite.mmdb"
-sudo install -m 0444 "$work/dbip-asn-lite.mmdb" \
-  "/var/lib/pcc/dbip/$release/dbip-asn-lite.mmdb"
+install -d -m 0755 "dbip-$release"
+install -m 0444 "$work/dbip-city-lite.mmdb" \
+  "dbip-$release/dbip-city-lite.mmdb"
+install -m 0444 "$work/dbip-asn-lite.mmdb" \
+  "dbip-$release/dbip-asn-lite.mmdb"
 ```
 
-No updater or network access from the application pod is needed. Replace the snapshot only after choosing and reviewing another release yourself.
+Copy the two staged files into storage exposed by a pre-provisioned PVC named `pcc-dbip`. The storage-specific provisioning and copy procedure is intentionally left to the cluster operator. No updater or network access from the application pod is needed. Replace the snapshot only after choosing and reviewing another release yourself.
 
-## 2. Mount it in k3s
+## 2. Mount it in Kubernetes
 
-Merge the following fragment into the Deployment in `docs/k3s-deployment.md`:
+Merge the following fragment into the Deployment in `docs/kubernetes-deployment.md`:
 
 ```yaml
 spec:
@@ -68,12 +68,11 @@ spec:
       volumes:
         # Keep the existing tmp volume.
         - name: dbip
-          hostPath:
-            path: /var/lib/pcc/dbip/2026-09
-            type: Directory
+          persistentVolumeClaim:
+            claimName: pcc-dbip
 ```
 
-Merge these entries with the existing `env`, `volumeMounts`, and `volumes` lists; do not create duplicate YAML keys. A `hostPath` binds the pod to the node containing the snapshot, which is appropriate for the guide's single-node, single-replica deployment. Use a read-only PVC instead on a multi-node cluster.
+Merge these entries with the existing `env`, `volumeMounts`, and `volumes` lists; do not create duplicate YAML keys. The PVC must expose `dbip-city-lite.mmdb` and `dbip-asn-lite.mmdb` at its root. The container mounts it read-only.
 
 Apply the manifest and recreate the pod so the application opens the selected files:
 
