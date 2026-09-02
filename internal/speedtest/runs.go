@@ -93,6 +93,18 @@ func (r *Registry) Get(id, owner string) (*Run, error) {
 	}
 	return x, nil
 }
+func (r *Registry) CloseOwned(id, owner string) error {
+	r.mu.Lock()
+	x := r.runs[id]
+	if x == nil || x.Owner != owner {
+		r.mu.Unlock()
+		return errors.New("not found")
+	}
+	delete(r.runs, id)
+	r.mu.Unlock()
+	x.close()
+	return nil
+}
 func (r *Registry) Close(id string) {
 	r.mu.Lock()
 	x := r.runs[id]

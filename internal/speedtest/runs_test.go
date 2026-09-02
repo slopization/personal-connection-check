@@ -22,3 +22,23 @@ func TestRunRegistryLimitsAndOwnership(t *testing.T) {
 		t.Fatal(e)
 	}
 }
+
+func TestCloseOwnedRestoresCapacityOnlyForOwner(t *testing.T) {
+	r := New(1, 1, time.Second)
+	run, err := r.Create("owner")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := r.CloseOwned(run.ID, "other"); err == nil {
+		t.Fatal("non-owner closed run")
+	}
+	if _, err := r.Create("other"); err == nil {
+		t.Fatal("non-owner close restored capacity")
+	}
+	if err := r.CloseOwned(run.ID, "owner"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Create("other"); err != nil {
+		t.Fatalf("owner close did not restore capacity: %v", err)
+	}
+}

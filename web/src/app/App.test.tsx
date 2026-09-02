@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { warmPing } from "./App";
+import { closeRun, warmPing } from "./App";
 
 class PendingSocket {
   static instances: PendingSocket[] = [];
@@ -13,6 +13,19 @@ class PendingSocket {
     PendingSocket.instances.push(this);
   }
 }
+
+describe("run cleanup", () => {
+  it("deletes the owned run with a keepalive request", async () => {
+    const fetcher = vi.fn(async () => new Response(null, { status: 204 }));
+
+    expect(await closeRun("run/id", fetcher)).toBe(true);
+
+    expect(fetcher).toHaveBeenCalledWith(
+      "/api/test-runs/run%2Fid",
+      expect.objectContaining({ method: "DELETE", keepalive: true }),
+    );
+  });
+});
 
 describe("warm ping", () => {
   afterEach(() => {

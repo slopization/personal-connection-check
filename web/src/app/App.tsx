@@ -67,6 +67,21 @@ export function warmPing(signal: AbortSignal, timeoutMs = 10_000) {
     ws.onerror = () => finish(new Error("Ping failed"));
   });
 }
+export async function closeRun(
+  id: string,
+  fetcher: typeof fetch = fetch,
+): Promise<boolean> {
+  try {
+    const response = await fetcher(`/api/test-runs/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+      keepalive: true,
+    });
+    return response.ok || response.status === 404;
+  } catch {
+    // The server-side TTL remains the fail-safe when the browser is offline.
+    return false;
+  }
+}
 export function App() {
   const [password, setPassword] = useState("");
   const [logged, setLogged] = useState(false);
@@ -116,6 +131,7 @@ export function App() {
   async function measure() {
     if (monitoring) return;
     const ctl = new AbortController();
+    let runID: string | undefined;
     runCtl.current = ctl;
     try {
       setStatus(t.pinging);
@@ -126,11 +142,13 @@ export function App() {
       });
       if (!created.ok) throw new Error("run failed");
       const run = (await created.json()) as { id: string };
+      runID = run.id;
       setStatus(t.downloading);
       const value = await runAdaptive(
         createBrowserTransport(run.id),
         ctl.signal,
       );
+      if (await closeRun(run.id)) runID = undefined;
       setStatus(t.uploading);
       const stored: SpeedResult = {
         at: Date.now(),
@@ -148,6 +166,7 @@ export function App() {
       if ((e as DOMException).name !== "AbortError")
         setStatus(t.measurementFailed);
     } finally {
+      if (runID) await closeRun(runID);
       runCtl.current = undefined;
     }
   }

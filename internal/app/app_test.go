@@ -119,3 +119,30 @@ func TestDownloadPhaseEndsAndReleasesStreamSlot(t *testing.T) {
 	}
 	run.Release()
 }
+
+func TestDeleteRunClosesOwnedRunAndRestoresCapacity(t *testing.T) {
+	a, err := New(Config{Runtime: config.Config{SessionKeys: [][]byte{make([]byte, 32)}, MaxRuns: 1, MaxStreams: 1, MaxDuration: time.Second, UploadLimit: 1}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+	const sessionID = "session"
+	run, err := a.runs.Create(sessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	token, err := a.sessions.Encode(auth.Claims{Subject: "test", SessionID: sessionID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodDelete, "/api/test-runs/"+run.ID, nil)
+	req.AddCookie(&http.Cookie{Name: "pcc_session", Value: token})
+	w := httptest.NewRecorder()
+	a.ServeHTTP(w, req)
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("delete status=%d, want 204", w.Code)
+	}
+	if _, err := a.runs.Create("next"); err != nil {
+		t.Fatalf("delete did not restore capacity: %v", err)
+	}
+}

@@ -113,6 +113,10 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if a.origin(w, r) {
 			a.protected(w, r, a.create)
 		}
+	case strings.HasPrefix(r.URL.Path, "/api/test-runs/") && r.Method == "DELETE":
+		if a.origin(w, r) {
+			a.protected(w, r, a.closeRun)
+		}
 	case strings.HasSuffix(r.URL.Path, "/download") && r.Method == "GET":
 		a.protected(w, r, a.download)
 	case strings.HasSuffix(r.URL.Path, "/upload") && r.Method == "POST":
@@ -244,6 +248,15 @@ func (a *App) create(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Cache-Control", "no-store, no-transform")
 	json.NewEncoder(w).Encode(map[string]any{"id": x.ID, "expiresAt": x.Expires})
+}
+func (a *App) closeRun(w http.ResponseWriter, r *http.Request) {
+	c, ok := a.claims(r)
+	id := strings.TrimPrefix(r.URL.Path, "/api/test-runs/")
+	if !ok || id == "" || strings.Contains(id, "/") || a.runs.CloseOwned(id, c.SessionID) != nil {
+		http.NotFound(w, r)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 func (a *App) run(r *http.Request) (*speedtest.Run, bool) {
 	c, ok := a.claims(r)
