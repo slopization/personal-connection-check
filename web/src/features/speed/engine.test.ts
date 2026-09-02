@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { runAdaptive } from "./engine";
 
 const phase = (rate: number) => ({
@@ -7,6 +7,8 @@ const phase = (rate: number) => ({
 });
 
 describe("adaptive speed engine", () => {
+  afterEach(() => vi.useRealTimers());
+
   it("measures the complete download ramp before the upload ramp and preserves Mbps samples", async () => {
     const calls: string[] = [];
     let now = 0;
@@ -71,6 +73,32 @@ describe("adaptive speed engine", () => {
 
     await runAdaptive(transport, undefined, 10);
     expect(aborted).toEqual(["download", "upload"]);
+  });
+
+  it("finishes both direction deadlines when browser work ignores abort", async () => {
+    vi.useFakeTimers();
+    let settled = false;
+    const never = () => new Promise<never>(() => undefined);
+    const run = runAdaptive(
+      {
+        now: () => Date.now(),
+        download: never,
+        upload: never,
+      },
+      undefined,
+      100,
+    ).then((result) => {
+      settled = true;
+      return result;
+    });
+
+    await vi.advanceTimersByTimeAsync(200);
+
+    expect(settled).toBe(true);
+    await expect(run).resolves.toMatchObject({
+      downloadMbps: 0,
+      uploadMbps: 0,
+    });
   });
 
   it("cancels an active direction promptly when the caller cancels", async () => {

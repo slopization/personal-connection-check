@@ -46,11 +46,20 @@ async function measureDirection(
 ): Promise<Measured> {
   const ctl = new AbortController();
   let expired = false;
+  let rejectStop: (error: Error) => void = () => undefined;
+  const stop = new Promise<never>((_resolve, reject) => {
+    rejectStop = reject;
+  });
+  void stop.catch(() => undefined);
   const timer = window.setTimeout(() => {
     expired = true;
     ctl.abort();
+    rejectStop(new DOMException("direction timed out", "TimeoutError"));
   }, limitMs);
-  const cancel = () => ctl.abort();
+  const cancel = () => {
+    ctl.abort();
+    rejectStop(new DOMException("cancelled", "AbortError"));
+  };
   external?.addEventListener("abort", cancel, { once: true });
   const started = now();
   let previous = 0;
@@ -61,7 +70,7 @@ async function measureDirection(
       if (external?.aborted) throw new DOMException("cancelled", "AbortError");
       if (ctl.signal.aborted) break;
       try {
-        const phase = await work(streams, ctl.signal);
+        const phase = await Promise.race([work(streams, ctl.signal), stop]);
         result = { rate: rate(phase.samples), streams };
         const elapsed = now() - started;
         const marginal = previous > 0 && result.rate < previous * 1.05;
