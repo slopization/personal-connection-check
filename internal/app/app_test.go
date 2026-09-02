@@ -4,13 +4,8 @@ import (
 	"bytes"
 	"codeberg.org/modelgarden/personal-connection-check/internal/auth"
 	"codeberg.org/modelgarden/personal-connection-check/internal/config"
-	"encoding/base64"
-	"encoding/binary"
-	"hash/crc32"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
-	"strings"
 	"testing"
 	"time"
 )
@@ -59,8 +54,8 @@ func TestRunLifetimeAllowsBothDirectionCaps(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if remaining := time.Until(run.Expires); remaining < 2*direction+900*time.Millisecond {
-		t.Fatalf("run lifetime %v, want enough for both directions plus bounded overhead", remaining)
+	if remaining, minimum := time.Until(run.Expires), runTTL(direction)-100*time.Millisecond; remaining < minimum {
+		t.Fatalf("run lifetime %v, want at least %v", remaining, minimum)
 	}
 }
 
@@ -152,72 +147,8 @@ func TestDeleteRunClosesOwnedRunAndRestoresCapacity(t *testing.T) {
 	}
 }
 
-func testSharePNG(width, height uint32, size int) []byte {
-	if size < 33 {
-		size = 33
-	}
-	png := make([]byte, size)
-	copy(png, []byte("\x89PNG\r\n\x1a\n"))
-	binary.BigEndian.PutUint32(png[8:12], 13)
-	copy(png[12:16], []byte("IHDR"))
-	binary.BigEndian.PutUint32(png[16:20], width)
-	binary.BigEndian.PutUint32(png[20:24], height)
-	png[24] = 8 // bit depth
-	png[25] = 2 // truecolour
-	binary.BigEndian.PutUint32(png[29:33], crc32.ChecksumIEEE(png[12:29]))
-	return png
-}
-
-func TestValidSharePNGRejectsMalformedOrOversizedPayload(t *testing.T) {
-	valid := testSharePNG(1200, 630, 33)
-	badLength := append([]byte(nil), valid...)
-	binary.BigEndian.PutUint32(badLength[8:12], 0)
-	badCRC := append([]byte(nil), valid...)
-	badCRC[29] ^= 0xff
-	for name, payload := range map[string][]byte{
-		"truncated IHDR":  valid[:24],
-		"wrong size":      testSharePNG(1199, 630, 33),
-		"bad IHDR length": badLength,
-		"bad IHDR CRC":    badCRC,
-		"oversized":       testSharePNG(1200, 630, 3<<20+1),
-	} {
-		t.Run(name, func(t *testing.T) {
-			if validSharePNG(payload) {
-				t.Fatal("invalid share PNG accepted")
-			}
-		})
-	}
-	if !validSharePNG(valid) {
-		t.Fatal("valid 1200x630 PNG header rejected")
-	}
-}
-
-func TestSharePNGReturnsValidatedNativeAttachment(t *testing.T) {
-	a, err := New(Config{Runtime: config.Config{PublicOrigin: "https://example.com", SessionKeys: [][]byte{make([]byte, 32)}}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	png := testSharePNG(1200, 630, 33)
-	form := url.Values{"data": {base64.StdEncoding.EncodeToString(png)}}.Encode()
-	req := httptest.NewRequest(http.MethodPost, "/api/share.png", strings.NewReader(form))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Origin", "https://example.com")
-	token, err := a.sessions.Encode(auth.Claims{Subject: "owner", Expires: time.Now().Add(time.Minute).Unix()})
-	if err != nil {
-		t.Fatal(err)
-	}
-	req.AddCookie(&http.Cookie{Name: "pcc_session", Value: token})
-	w := httptest.NewRecorder()
-
-	a.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
-	}
-	if got := w.Header().Get("Content-Disposition"); got != `attachment; filename="connection-check.png"` {
-		t.Fatalf("Content-Disposition = %q", got)
-	}
-	if !bytes.Equal(w.Body.Bytes(), png) {
-		t.Fatal("attachment body differs from validated PNG")
+func TestRunTTLIncludesBothDirectionsAndCleanupMargin(t *testing.T) {
+	if got, want := runTTL(15*time.Second), 40*time.Second; got != want {
+		t.Fatalf("runTTL(15s) = %v, want %v", got, want)
 	}
 }

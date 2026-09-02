@@ -82,35 +82,24 @@ export async function closeRun(
     return false;
   }
 }
-export function blobBase64(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(reader.error ?? new Error("PNG read failed"));
-    reader.onload = () => {
-      const result = reader.result;
-      if (typeof result !== "string" || !result.includes(",")) {
-        reject(new Error("PNG encoding failed"));
-        return;
-      }
-      resolve(result.slice(result.indexOf(",") + 1));
-    };
-    reader.readAsDataURL(blob);
-  });
-}
-export function submitPNG(data: string, doc: Document = document): void {
-  const form = doc.createElement("form");
-  form.method = "post";
-  form.action = "/api/share.png";
-  const input = doc.createElement("input");
-  input.type = "hidden";
-  input.name = "data";
-  input.value = data;
-  form.append(input);
-  doc.body.append(form);
+export function downloadBlob(
+  blob: Blob,
+  doc: Document = document,
+  createObjectURL: (blob: Blob) => string = URL.createObjectURL.bind(URL),
+  revokeObjectURL: (url: string) => void = URL.revokeObjectURL.bind(URL),
+): void {
+  const href = createObjectURL(blob);
+  const anchor = doc.createElement("a");
+  anchor.href = href;
+  anchor.download = "connection-check.png";
+  doc.body.append(anchor);
   try {
-    form.submit();
+    anchor.click();
   } finally {
-    window.setTimeout(() => form.remove(), 1000);
+    window.setTimeout(() => {
+      anchor.remove();
+      revokeObjectURL(href);
+    }, 1000);
   }
 }
 export function App() {
@@ -120,6 +109,7 @@ export function App() {
   const [tab, setTab] = useState<"speed" | "stability" | "history">("speed");
   const [history, setHistory] = useState<SpeedResult[]>([]);
   const [result, setResult] = useState<SpeedResult>();
+  const [pngBlob, setPNGBlob] = useState<Blob>();
   const [info, setInfo] = useState<Info>();
   const [samples, setSamples] = useState<Sample[]>([]);
   const [pauses, setPauses] = useState<number[]>([]);
@@ -161,6 +151,7 @@ export function App() {
   }
   async function measure() {
     if (monitoring) return;
+    setPNGBlob(undefined);
     const ctl = new AbortController();
     let runID: string | undefined;
     runCtl.current = ctl;
@@ -191,7 +182,18 @@ export function App() {
         city: info?.city,
       };
       await save(stored);
+      let preparedPNG: Blob | undefined;
+      try {
+        preparedPNG = await exportPNG({
+          result: stored,
+          title: t.title,
+          methodology: t.methodology,
+        });
+      } catch {
+        // Measurement results remain usable if this browser cannot encode PNG.
+      }
       setResult(stored);
+      setPNGBlob(preparedPNG);
       setStatus(t.speedResult(stored.download, stored.upload));
     } catch (e) {
       if ((e as DOMException).name !== "AbortError")
@@ -221,15 +223,7 @@ export function App() {
   async function show() {
     setHistory(await list());
   }
-  async function png() {
-    if (!result) return;
-    const b = await exportPNG({
-      result,
-      title: t.title,
-      methodology: t.methodology,
-    });
-    submitPNG(await blobBase64(b));
-  }
+
   if (!logged)
     return (
       <main>
@@ -304,7 +298,9 @@ export function App() {
               )}
             </aside>
           )}
-          {result && <button onClick={() => void png()}>{t.png}</button>}
+          {result && pngBlob && (
+            <button onClick={() => downloadBlob(pngBlob)}>{t.png}</button>
+          )}
         </section>
       )}
       {tab === "stability" && (

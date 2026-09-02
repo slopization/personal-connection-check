@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { blobBase64, closeRun, submitPNG, warmPing } from "./App";
+import { closeRun, downloadBlob, warmPing } from "./App";
 
 class PendingSocket {
   static instances: PendingSocket[] = [];
@@ -28,31 +28,35 @@ describe("run cleanup", () => {
 });
 
 describe("PNG download", () => {
-  it("encodes a PNG blob for the native attachment form", async () => {
-    await expect(blobBase64(new Blob(["png"]))).resolves.toBe("cG5n");
-  });
+  afterEach(() => vi.useRealTimers());
 
-  it("submits a connected same-origin form for WebKit native attachment", () => {
+  it("clicks a connected download anchor and delays Blob URL cleanup", () => {
     vi.useFakeTimers();
-    const submit = vi
-      .spyOn(HTMLFormElement.prototype, "submit")
-      .mockImplementation(function (this: HTMLFormElement) {
-        expect(this.isConnected).toBe(true);
-        expect(this.method).toBe("post");
-        expect(this.action).toMatch(/\/api\/share\.png$/);
-        expect(new FormData(this).get("data")).toBe("cG5n");
-      });
+    const blob = new Blob(["png"], { type: "image/png" });
+    const createObjectURL = vi.fn(() => "blob:pcc-result");
+    const revokeObjectURL = vi.fn();
+    const click = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => undefined);
 
-    submitPNG("cG5n", document);
+    downloadBlob(blob, document, createObjectURL, revokeObjectURL);
 
-    expect(submit).toHaveBeenCalledOnce();
-    expect(
-      document.querySelector('form[action="/api/share.png"]'),
-    ).not.toBeNull();
-    vi.runAllTimers();
-    expect(document.querySelector('form[action="/api/share.png"]')).toBeNull();
-    submit.mockRestore();
-    vi.useRealTimers();
+    const anchor = document.querySelector<HTMLAnchorElement>(
+      'a[download="connection-check.png"]',
+    );
+    expect(createObjectURL).toHaveBeenCalledWith(blob);
+    expect(anchor).not.toBeNull();
+    expect(anchor?.isConnected).toBe(true);
+    expect(anchor?.href).toBe("blob:pcc-result");
+    expect(click).toHaveBeenCalledOnce();
+    expect(revokeObjectURL).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(999);
+    expect(anchor?.isConnected).toBe(true);
+    vi.advanceTimersByTime(1);
+    expect(anchor?.isConnected).toBe(false);
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:pcc-result");
+    click.mockRestore();
   });
 });
 
