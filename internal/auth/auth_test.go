@@ -34,6 +34,25 @@ func TestSessionRejectsTamperAndExpiry(t *testing.T) {
 	}
 }
 
+func TestSessionCookieSecurityIsConfigurable(t *testing.T) {
+	for _, secure := range []bool{false, true} {
+		t.Run(map[bool]string{false: "loopback HTTP", true: "HTTPS"}[secure], func(t *testing.T) {
+			s := NewSessions([][]byte{make([]byte, 32)}, secure)
+			w := httptest.NewRecorder()
+			s.Set(w, Claims{Subject: "x"})
+			cookies := w.Result().Cookies()
+			if len(cookies) != 1 || cookies[0].Secure != secure {
+				t.Fatalf("cookie Secure = %v, want %v", cookies[0].Secure, secure)
+			}
+			cleared := httptest.NewRecorder()
+			s.Clear(cleared)
+			if got := cleared.Result().Cookies()[0]; got.Secure != secure || got.MaxAge != -1 {
+				t.Fatalf("clear cookie = %+v, want matching security and deletion", got)
+			}
+		})
+	}
+}
+
 func TestNewOIDCDiscoveryHonorsContextDeadline(t *testing.T) {
 	discoveryStarted := make(chan struct{})
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

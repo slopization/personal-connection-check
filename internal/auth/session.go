@@ -18,11 +18,18 @@ type Claims struct {
 	Expires   int64  `json:"exp"`
 }
 type Sessions struct {
-	keys [][]byte
-	Now  func() time.Time
+	keys   [][]byte
+	secure bool
+	Now    func() time.Time
 }
 
-func NewSessions(keys [][]byte) *Sessions { return &Sessions{keys: keys, Now: time.Now} }
+func NewSessions(keys [][]byte, secure ...bool) *Sessions {
+	cookieSecure := true
+	if len(secure) > 0 {
+		cookieSecure = secure[0]
+	}
+	return &Sessions{keys: keys, secure: cookieSecure, Now: time.Now}
+}
 func randomID() string {
 	b := make([]byte, 24)
 	_, _ = rand.Read(b)
@@ -81,9 +88,14 @@ func (s *Sessions) Decode(v string) (Claims, error) {
 func (s *Sessions) Set(w http.ResponseWriter, c Claims) {
 	v, e := s.Encode(c)
 	if e == nil {
-		http.SetCookie(w, &http.Cookie{Name: "pcc_session", Value: v, Path: "/", HttpOnly: true, Secure: true, SameSite: http.SameSiteLaxMode, MaxAge: 8 * 3600})
+		http.SetCookie(w, &http.Cookie{Name: "pcc_session", Value: v, Path: "/", HttpOnly: true, Secure: s.secure, SameSite: http.SameSiteLaxMode, MaxAge: 8 * 3600})
 	}
 }
+func (s *Sessions) Clear(w http.ResponseWriter) {
+	http.SetCookie(w, &http.Cookie{Name: "pcc_session", Value: "", Path: "/", HttpOnly: true, Secure: s.secure, SameSite: http.SameSiteLaxMode, MaxAge: -1})
+}
+
+// Clear preserves the secure production default for callers that have no session configuration.
 func Clear(w http.ResponseWriter) {
-	http.SetCookie(w, &http.Cookie{Name: "pcc_session", Value: "", Path: "/", HttpOnly: true, Secure: true, SameSite: http.SameSiteLaxMode, MaxAge: -1})
+	NewSessions(nil).Clear(w)
 }

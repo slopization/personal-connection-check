@@ -25,4 +25,25 @@ describe("browser speed transport", () => {
         .length,
     ).toBeGreaterThanOrEqual(2);
   });
+
+  it("keeps upload workers active for a bounded phase and emits timed samples", async () => {
+    let clock = 0;
+    const fetcher = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ bytes: 32 }), {
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    const transport = createBrowserTransport(
+      "run",
+      fetcher,
+      () => (clock += 100),
+    );
+
+    const upload = await transport.upload(1, new AbortController().signal);
+
+    expect(upload.samples.length).toBeGreaterThanOrEqual(4);
+    expect(upload.ackBytes).toBeGreaterThanOrEqual(192);
+    expect(fetcher).toHaveBeenCalledTimes(6);
+  });
 });

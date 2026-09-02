@@ -5,6 +5,8 @@ type Fetcher = (
   init?: RequestInit,
 ) => Promise<Response>;
 const CHUNK = 1024 * 1024;
+const PHASE_MS = 1250;
+const MAX_UPLOAD_REQUESTS = 8;
 const mbps = (bytes: number, elapsed: number) =>
   elapsed > 0 ? (bytes * 8 * 1000) / elapsed / 1_000_000 : 0;
 
@@ -47,25 +49,42 @@ export function createBrowserTransport(
     return { bytes, samples };
   }
   async function uploadWorker(
-    signal: AbortSignal,
+    parent: AbortSignal,
   ): Promise<{ ackBytes: number; samples: number[] }> {
+    const ctl = new AbortController();
+    const timeout = window.setTimeout(() => ctl.abort(), PHASE_MS);
+    const cancel = () => ctl.abort();
+    parent.addEventListener("abort", cancel, { once: true });
+    const signal = ctl.signal;
     const started = now();
     let ackBytes = 0;
     const samples: number[] = [];
-    // Repeated chunks keep the request path saturated; only server-confirmed bytes are measured.
-    for (let i = 0; i < 4 && !signal.aborted; i++) {
-      const response = await fetcher(url("upload"), {
-        method: "POST",
-        body: new Uint8Array(CHUNK),
-        signal,
-        cache: "no-store",
-      });
-      if (!response.ok) throw new Error("upload failed");
-      const ack = (await response.json()) as { bytes?: number };
-      ackBytes += Number(ack.bytes) || 0;
-      const elapsed = now() - started;
-      if (elapsed >= (samples.length + 1) * 250)
-        samples.push(mbps(ackBytes, elapsed));
+    try {
+      for (
+        let i = 0;
+        i < MAX_UPLOAD_REQUESTS &&
+        !signal.aborted &&
+        now() - started < PHASE_MS;
+        i++
+      ) {
+        const response = await fetcher(url("upload"), {
+          method: "POST",
+          body: new Uint8Array(CHUNK),
+          signal,
+          cache: "no-store",
+        });
+        if (!response.ok) throw new Error("upload failed");
+        const ack = (await response.json()) as { bytes?: number };
+        ackBytes += Number(ack.bytes) || 0;
+        const elapsed = now() - started;
+        if (elapsed >= (samples.length + 1) * 250)
+          samples.push(mbps(ackBytes, elapsed));
+      }
+    } catch (error) {
+      if (!signal.aborted) throw error;
+    } finally {
+      window.clearTimeout(timeout);
+      parent.removeEventListener("abort", cancel);
     }
     return { ackBytes, samples };
   }

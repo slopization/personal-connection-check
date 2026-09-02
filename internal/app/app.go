@@ -48,7 +48,16 @@ func New(c Config) (*App, error) {
 		c.Runtime.MaxDuration = 15 * time.Second
 		c.Runtime.UploadLimit = 16 << 20
 	}
-	a := &App{cfg: c.Runtime, sessions: auth.NewSessions(c.Runtime.SessionKeys), runs: speedtest.New(c.Runtime.MaxRuns, 1, c.Runtime.MaxStreams, c.Runtime.MaxDuration), login: map[string]bucket{}, ws: make(chan struct{}, c.Runtime.MaxRuns*2), verify: make(chan struct{}, 2), wsClose: map[*websocket.Conn]func(){}, geo: networkinfo.Open(c.Runtime.GeoCity, c.Runtime.GeoASN), static: webui.Handler()}
+	cookieSecure := true
+	if c.Runtime.PublicOrigin != "" {
+		var err error
+		cookieSecure, err = config.SessionCookieSecure(c.Runtime.PublicOrigin)
+		if err != nil {
+			return nil, fmt.Errorf("invalid public origin")
+		}
+	}
+	c.Runtime.SessionCookieSecure = cookieSecure
+	a := &App{cfg: c.Runtime, sessions: auth.NewSessions(c.Runtime.SessionKeys, c.Runtime.SessionCookieSecure), runs: speedtest.New(c.Runtime.MaxRuns, 1, c.Runtime.MaxStreams, 2*c.Runtime.MaxDuration+time.Second), login: map[string]bucket{}, ws: make(chan struct{}, c.Runtime.MaxRuns*2), verify: make(chan struct{}, 2), wsClose: map[*websocket.Conn]func(){}, geo: networkinfo.Open(c.Runtime.GeoCity, c.Runtime.GeoASN), static: webui.Handler()}
 	if c.Runtime.OIDCIssuer != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), oidcDiscoveryTimeout)
 		defer cancel()
@@ -89,7 +98,7 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if !a.origin(w, r) {
 			return
 		}
-		auth.Clear(w)
+		a.sessions.Clear(w)
 		w.WriteHeader(204)
 	case r.URL.Path == "/api/auth/oidc/begin" && r.Method == "GET":
 		a.beginOIDC(w, r)

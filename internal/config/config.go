@@ -22,6 +22,7 @@ type Config struct {
 	MaxDuration                                              time.Duration
 	UploadLimit                                              int64
 	GeoCity, GeoASN, Listen, PublicOrigin                    string
+	SessionCookieSecure                                      bool
 }
 
 func Load() (Config, error) {
@@ -42,12 +43,6 @@ func Load() (Config, error) {
 	}
 	if any && !all {
 		return c, fmt.Errorf("incomplete OIDC configuration")
-	}
-	if all {
-		u, e := url.Parse(c.PublicOrigin)
-		if e != nil || u.Scheme == "" || u.Host == "" {
-			return c, fmt.Errorf("invalid public origin")
-		}
 	}
 	for _, raw := range strings.Split(os.Getenv("PCC_SESSION_KEYS"), ",") {
 		if raw == "" {
@@ -83,14 +78,34 @@ func Load() (Config, error) {
 	if c.PublicOrigin == "" {
 		return c, fmt.Errorf("public origin is required")
 	}
-	u, e := url.Parse(c.PublicOrigin)
-	if e != nil || u.Scheme == "" || u.Host == "" {
+	secure, e := SessionCookieSecure(c.PublicOrigin)
+	if e != nil {
 		return c, fmt.Errorf("invalid public origin")
 	}
+	c.SessionCookieSecure = secure
 	if all && len(c.OIDCEmails) == 0 {
 		return c, fmt.Errorf("OIDC email allowlist is required")
 	}
 	return c, nil
+}
+
+func SessionCookieSecure(origin string) (bool, error) {
+	u, err := url.Parse(origin)
+	if err != nil || u.Host == "" || u.User != nil || u.Path != "" || u.RawQuery != "" || u.Fragment != "" {
+		return false, fmt.Errorf("not an origin")
+	}
+	switch u.Scheme {
+	case "https":
+		return true, nil
+	case "http":
+		host, err := netip.ParseAddr(u.Hostname())
+		if err != nil || !host.IsLoopback() {
+			return false, fmt.Errorf("HTTP origin is not loopback")
+		}
+		return false, nil
+	default:
+		return false, fmt.Errorf("unsupported origin scheme")
+	}
 }
 func env(k, d string) string {
 	if v := os.Getenv(k); v != "" {

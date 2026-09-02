@@ -1,24 +1,94 @@
 import { describe, expect, it } from "vitest";
 import { runAdaptive } from "./engine";
+
+const phase = (rate: number) => ({
+  bytes: 125_000,
+  samples: [rate, rate, rate],
+});
+
 describe("adaptive speed engine", () => {
-  it("ramps streams and uses server acknowledged upload bytes", async () => {
-    const calls: number[] = [];
-    const result = await runAdaptive({
-      now: (() => {
-        let n = 0;
-        return () => (n += 3000);
-      })(),
-      download: async (streams) => {
-        calls.push(streams);
-        return { bytes: streams * 125000, samples: [100, 100, 101, 100, 100] };
+  it("measures the complete download ramp before the upload ramp and preserves Mbps samples", async () => {
+    const calls: string[] = [];
+    let now = 0;
+    const transport = {
+      now: () => now,
+      download: async (streams: number) => {
+        calls.push(`download:${streams}`);
+        now += 1_250;
+        return phase(100);
       },
-      upload: async (streams) => ({
-        ackBytes: streams * 125000,
-        samples: [90, 90, 91, 90, 90],
-      }),
-    });
-    expect(calls).toEqual([1, 2]);
-    expect(result.downloadMbps).toBeGreaterThan(0);
-    expect(result.uploadMbps).toBeGreaterThan(0);
+      upload: async (streams: number) => {
+        calls.push(`upload:${streams}`);
+        now += 1_250;
+        return { ackBytes: 125_000, samples: [80, 80, 80] };
+      },
+    };
+
+    const result = await runAdaptive(transport);
+
+    expect(calls).toEqual([
+      "download:1",
+      "download:2",
+      "download:4",
+      "download:8",
+      "upload:1",
+      "upload:2",
+      "upload:4",
+      "upload:8",
+    ]);
+    expect(result.downloadMbps).toBe(100);
+    expect(result.uploadMbps).toBe(80);
+    expect(result.durationMs).toBe(10_000);
+  });
+
+  it("gives download and upload independent bounded deadlines", async () => {
+    const aborted: string[] = [];
+    const transport = {
+      now: () => 0,
+      download: (_streams: number, signal: AbortSignal) =>
+        new Promise<{ bytes: number; samples: number[] }>((resolve) => {
+          signal.addEventListener(
+            "abort",
+            () => {
+              aborted.push("download");
+              resolve(phase(10));
+            },
+            { once: true },
+          );
+        }),
+      upload: (_streams: number, signal: AbortSignal) =>
+        new Promise<{ ackBytes: number; samples: number[] }>((resolve) => {
+          signal.addEventListener(
+            "abort",
+            () => {
+              aborted.push("upload");
+              resolve({ ackBytes: 1, samples: [20] });
+            },
+            { once: true },
+          );
+        }),
+    };
+
+    await runAdaptive(transport, undefined, 10);
+    expect(aborted).toEqual(["download", "upload"]);
+  });
+
+  it("cancels an active direction promptly when the caller cancels", async () => {
+    const ctl = new AbortController();
+    const transport = {
+      now: () => 0,
+      download: (_streams: number, signal: AbortSignal) =>
+        new Promise<{ bytes: number; samples: number[] }>((_resolve, reject) =>
+          signal.addEventListener(
+            "abort",
+            () => reject(new DOMException("cancelled", "AbortError")),
+            { once: true },
+          ),
+        ),
+      upload: async () => ({ ackBytes: 0, samples: [] }),
+    };
+    const run = runAdaptive(transport, ctl.signal, 100);
+    ctl.abort();
+    await expect(run).rejects.toMatchObject({ name: "AbortError" });
   });
 });

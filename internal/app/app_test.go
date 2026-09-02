@@ -35,6 +35,29 @@ func TestNewFailsWhenConfiguredOIDCDiscoveryFails(t *testing.T) {
 	}
 }
 
+func TestNewRejectsNonLoopbackHTTPOrigin(t *testing.T) {
+	_, err := New(Config{Runtime: config.Config{PublicOrigin: "http://connection.example.com", MaxRuns: 1, MaxStreams: 1, MaxDuration: time.Second, UploadLimit: 1}})
+	if err == nil {
+		t.Fatal("New accepted non-loopback HTTP origin")
+	}
+}
+
+func TestRunLifetimeAllowsBothDirectionCaps(t *testing.T) {
+	const direction = 40 * time.Millisecond
+	a, err := New(Config{Runtime: config.Config{MaxRuns: 1, MaxStreams: 1, MaxDuration: direction, UploadLimit: 1}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+	run, err := a.runs.Create("session")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if remaining := time.Until(run.Expires); remaining < 2*direction+900*time.Millisecond {
+		t.Fatalf("run lifetime %v, want enough for both directions plus bounded overhead", remaining)
+	}
+}
+
 func TestCloseCancelsActiveRuns(t *testing.T) {
 	a, err := New(Config{})
 	if err != nil {
