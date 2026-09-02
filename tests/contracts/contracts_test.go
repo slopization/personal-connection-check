@@ -61,6 +61,7 @@ func TestMakeReleaseGateContract(t *testing.T) {
 	s := read(t, "../../Makefile")
 	for _, want := range []string{
 		"rm -rf internal/webui/dist",
+		"scripts/container-smoke.sh",
 		"release-gate: check e2e container container-smoke",
 	} {
 		requireContains(t, s, want)
@@ -86,7 +87,7 @@ func TestContainerWorkflowContract(t *testing.T) {
 		"git checkout --detach \"$GITHUB_SHA\"",
 		"set -euo pipefail",
 		"docker build",
-		"docker run --rm --read-only",
+		"make container-smoke",
 		"docker push \"$IMAGE:sha-${GITHUB_SHA:0:12}\"",
 		"docker pull \"$IMAGE:sha-${GITHUB_SHA:0:12}\"",
 		"RepoDigests",
@@ -115,5 +116,17 @@ func TestContainerWorkflowContract(t *testing.T) {
 	prefix := s[:publishStart]
 	if strings.Contains(prefix, "PACKAGE_TOKEN") {
 		t.Fatal("PACKAGE_TOKEN must not be available before the publish step")
+	}
+}
+
+func TestContainerSmokeExercisesDeliveredWebAssets(t *testing.T) {
+	s := read(t, "../../scripts/container-smoke.sh")
+	for _, want := range []string{
+		"--read-only",
+		"/healthz",
+		"/assets/",
+		"docker inspect",
+	} {
+		requireContains(t, s, want)
 	}
 }

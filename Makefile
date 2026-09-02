@@ -1,4 +1,5 @@
 GO=PATH="$(CURDIR)/.tools/go/bin:$$PATH" go
+IMAGE?=personal-connection-check:local
 web-assets:
 	cd web && npm run build
 	rm -rf internal/webui/dist
@@ -19,9 +20,9 @@ test-web:
 build: web-assets
 	$(GO) build ./cmd/pcc
 container:
-	docker build -t personal-connection-check:local .
+	docker build -t $(IMAGE) .
 container-smoke:
-	@docker run --rm --read-only --tmpfs /tmp:rw,noexec,nosuid,size=16m personal-connection-check:local healthcheck
+	IMAGE=$(IMAGE) ./scripts/container-smoke.sh
 e2e:
 	cd web && ./node_modules/.bin/playwright test
 e2e-install:

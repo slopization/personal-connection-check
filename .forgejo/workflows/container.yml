@@ -23,7 +23,7 @@ jobs:
         run: |
           set -euo pipefail
           docker build --label org.opencontainers.image.source=https://git.kyu.sh/modelgarden/personal-connection-check --label org.opencontainers.image.revision="$GITHUB_SHA" --label org.opencontainers.image.licenses=MIT -t "$IMAGE:sha-${GITHUB_SHA:0:12}" .
-          docker run --rm --read-only --tmpfs /tmp:rw,noexec,nosuid,size=16m "$IMAGE:sha-${GITHUB_SHA:0:12}" healthcheck
+          make container-smoke IMAGE="$IMAGE:sha-${GITHUB_SHA:0:12}"
       - id: publish
         name: publish immutable and release tags
         if: github.event_name == 'push'
