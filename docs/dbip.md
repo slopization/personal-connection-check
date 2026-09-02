@@ -2,7 +2,7 @@
 
 Personal Connection Check can enrich the observed public IP address from operator-mounted MMDB files. Lookups remain local: the application does not send an IP address to DB-IP or another lookup service.
 
-DB-IP Lite is useful when an operator prefers a manually reviewed, fixed snapshot. Its free City Lite and ASN Lite databases are distributed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). That license requires attribution but does not require automatic updates or deletion of an older snapshot. Review the current terms on the official download pages before selecting a release:
+DB-IP Lite is useful when an operator prefers a manually reviewed, fixed snapshot. Its free City Lite and ASN Lite databases are distributed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). That license requires attribution. Review the current terms on the official download pages before selecting a release:
 
 - [IP to City Lite](https://db-ip.com/db/download/ip-to-city-lite)
 - [IP to ASN Lite](https://db-ip.com/db/download/ip-to-asn-lite)
