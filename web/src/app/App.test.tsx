@@ -42,9 +42,12 @@ describe("PNG download", () => {
     expect(click).toHaveBeenCalledOnce();
     expect(
       document.querySelector('a[download="connection-check.png"]'),
-    ).toBeNull();
+    ).not.toBeNull();
     expect(revoke).not.toHaveBeenCalled();
     vi.runAllTimers();
+    expect(
+      document.querySelector('a[download="connection-check.png"]'),
+    ).toBeNull();
     expect(revoke).toHaveBeenCalledWith("blob:test");
     click.mockRestore();
     vi.useRealTimers();

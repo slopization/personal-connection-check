@@ -2,6 +2,36 @@ import { describe, expect, it, vi } from "vitest";
 import { createBrowserTransport } from "./protocol";
 
 describe("browser speed transport", () => {
+  it("bounds a download when WebKit reader.read never settles", async () => {
+    vi.useFakeTimers();
+    const cancel = vi.fn(async () => undefined);
+    const reader = {
+      read: () => new Promise<never>(() => undefined),
+      cancel,
+    } as unknown as ReadableStreamDefaultReader<Uint8Array>;
+    const fetcher: typeof fetch = vi.fn(
+      async () =>
+        ({
+          ok: true,
+          body: { getReader: () => reader },
+        }) as unknown as Response,
+    );
+    const transport = createBrowserTransport("run", fetcher, () => 0);
+    let settled = false;
+    const result = transport
+      .download(1, new AbortController().signal)
+      .then((value) => {
+        settled = true;
+        return value;
+      });
+
+    await vi.advanceTimersByTimeAsync(1_250);
+    expect(settled).toBe(true);
+    expect((await result).bytes).toBe(0);
+    expect(cancel).toHaveBeenCalledOnce();
+    vi.useRealTimers();
+  });
+
   it("uses parallel download readers and server acknowledged repeated upload chunks", async () => {
     const fetcher = vi.fn(
       async (url: RequestInfo | URL, init?: RequestInit) => {

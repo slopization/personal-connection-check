@@ -96,8 +96,10 @@ export function downloadBlob(
   try {
     anchor.click();
   } finally {
-    anchor.remove();
-    window.setTimeout(() => revokeObjectURL(href), 0);
+    window.setTimeout(() => {
+      anchor.remove();
+      revokeObjectURL(href);
+    }, 1000);
   }
 }
 export function App() {

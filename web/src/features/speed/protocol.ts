@@ -20,22 +20,37 @@ export function createBrowserTransport(
   const url = (path: string) => `/api/test-runs/${runID}/${path}`;
   async function downloadWorker(parent: AbortSignal): Promise<Phase> {
     const ctl = new AbortController();
-    const timeout = window.setTimeout(() => ctl.abort(), DOWNLOAD_TIMEOUT_MS);
-    parent.addEventListener("abort", () => ctl.abort(), { once: true });
+    const cancel = () => ctl.abort();
+    parent.addEventListener("abort", cancel, { once: true });
+    const timeout = window.setTimeout(cancel, DOWNLOAD_TIMEOUT_MS);
+    const phaseEnded = Symbol("phase ended");
+    let phaseTimeout: number | undefined;
+    const phaseStop = new Promise<typeof phaseEnded>((resolve) => {
+      phaseTimeout = window.setTimeout(() => {
+        cancel();
+        resolve(phaseEnded);
+      }, PHASE_MS);
+    });
     const signal = ctl.signal;
     const started = now();
-    const response = await fetcher(
-      `${url("download")}?nonce=${crypto.randomUUID()}&durationMs=${PHASE_MS}`,
-      { signal, cache: "no-store" },
-    );
-    if (!response.ok || !response.body) throw new Error("download failed");
-    const reader = response.body.getReader();
+    let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
     let bytes = 0;
     const samples: number[] = [];
     let complete = false;
     try {
+      const response = await Promise.race([
+        fetcher(
+          `${url("download")}?nonce=${crypto.randomUUID()}&durationMs=${PHASE_MS}`,
+          { signal, cache: "no-store" },
+        ),
+        phaseStop,
+      ]);
+      if (response === phaseEnded) return { bytes, samples };
+      if (!response.ok || !response.body) throw new Error("download failed");
+      reader = response.body.getReader();
       for (;;) {
-        const x = await reader.read();
+        const x = await Promise.race([reader.read(), phaseStop]);
+        if (x === phaseEnded) break;
         if (x.done) {
           complete = true;
           break;
@@ -50,7 +65,9 @@ export function createBrowserTransport(
       if (!signal.aborted) throw error;
     } finally {
       window.clearTimeout(timeout);
-      if (!complete) {
+      if (phaseTimeout !== undefined) window.clearTimeout(phaseTimeout);
+      parent.removeEventListener("abort", cancel);
+      if (reader && !complete) {
         let drainTimeout: number | undefined;
         await Promise.race([
           reader.cancel().catch(() => undefined),
