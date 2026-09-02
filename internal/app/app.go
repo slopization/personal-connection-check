@@ -8,6 +8,7 @@ import (
 	"codeberg.org/modelgarden/personal-connection-check/internal/webui"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/coder/websocket"
 
@@ -56,6 +57,27 @@ func uploadDeadline(now, runExpiry time.Time) time.Time {
 		return runExpiry
 	}
 	return deadline
+}
+
+func uploadReadStatus(err, runErr error) int {
+	if runErr != nil {
+		return -1
+	}
+	if err == nil {
+		return 0
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return -1
+	}
+	var maxBytes *http.MaxBytesError
+	if errors.As(err, &maxBytes) {
+		return http.StatusRequestEntityTooLarge
+	}
+	var timeout interface{ Timeout() bool }
+	if errors.As(err, &timeout) && timeout.Timeout() {
+		return 0
+	}
+	return http.StatusBadRequest
 }
 
 func finishUpload(body io.Closer, rc *http.ResponseController, release func()) {
@@ -369,9 +391,11 @@ func (a *App) upload(w http.ResponseWriter, r *http.Request) {
 	}()
 	defer finishWatchedUpload(stopWatcher, watcherResult, body, rc, x.Release)
 	start := time.Now()
-	n, e := io.Copy(io.Discard, &contextReader{r: r.Body, ctx: x.Context()})
-	if e != nil {
-		http.Error(w, "upload rejected", 413)
+	n, readErr := io.Copy(io.Discard, &contextReader{r: r.Body, ctx: x.Context()})
+	if status := uploadReadStatus(readErr, x.Context().Err()); status != 0 {
+		if status > 0 {
+			http.Error(w, http.StatusText(status), status)
+		}
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store, no-transform")

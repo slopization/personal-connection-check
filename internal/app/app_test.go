@@ -4,12 +4,40 @@ import (
 	"bytes"
 	"codeberg.org/modelgarden/personal-connection-check/internal/auth"
 	"codeberg.org/modelgarden/personal-connection-check/internal/config"
+	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
 	"testing"
 	"time"
 )
+
+type timeoutReadError struct{}
+
+func (timeoutReadError) Error() string   { return "read timeout" }
+func (timeoutReadError) Timeout() bool   { return true }
+func (timeoutReadError) Temporary() bool { return true }
+
+func TestUploadReadStatusAcknowledgesDeadlineBytes(t *testing.T) {
+	for name, tc := range map[string]struct {
+		readErr error
+		runErr  error
+		want    int
+	}{
+		"deadline is partial ACK":       {timeoutReadError{}, nil, 0},
+		"run cancellation stops":        {context.Canceled, nil, -1},
+		"body close after cancellation": {errors.New("body closed"), context.Canceled, -1},
+		"oversize is rejected":          {&http.MaxBytesError{Limit: 1}, nil, http.StatusRequestEntityTooLarge},
+		"malformed read rejected":       {errors.New("read failed"), nil, http.StatusBadRequest},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got := uploadReadStatus(tc.readErr, tc.runErr); got != tc.want {
+				t.Fatalf("uploadReadStatus(%v, %v) = %d, want %d", tc.readErr, tc.runErr, got, tc.want)
+			}
+		})
+	}
+}
 
 func TestHealthz(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/healthz", nil)
