@@ -11,37 +11,54 @@ This guide deploys one Personal Connection Check instance behind the Traefik ing
 - `kubectl` access
 - A DNS name pointing to the ingress, such as `connection.example.com`
 - A TLS Secret named `pcc-tls`, created manually or by cert-manager
-- Bash, OpenSSL, and Docker on the administration machine for secret generation
+- Bash, OpenSSL, and Docker on the administration machine for credential generation
 
-Use an immutable `sha-<12>` image tag for a stable deployment. The examples use `sha-12aaeff2522d`; replace it when selecting another verified revision.
+Use a fixed version tag for a stable deployment. The examples use `v1.0.0`; replace it when selecting another verified release.
 
 ## 2. Create the authentication Secret
 
-The password is read from standard input and is never placed in a process argument. Temporary files are mode `0600` and removed automatically.
+Generate the password hash and session key locally. The password is read from standard input and is never placed in a process argument. Copy each one-line result for use in the Secret file below.
 
 ```bash
 set -euo pipefail
-kubectl create namespace pcc --dry-run=client -o yaml | kubectl apply -f -
-
-IMAGE='git.kyu.sh/modelgarden/personal-connection-check:sha-12aaeff2522d'
-secret_dir="$(mktemp -d)"
-chmod 700 "$secret_dir"
-trap 'rm -rf "$secret_dir"; unset PASSWORD' EXIT
+IMAGE='git.kyu.sh/modelgarden/personal-connection-check:v1.0.0'
 
 read -rsp 'Shared password: ' PASSWORD
-printf '\n'
+trap 'unset PASSWORD' EXIT HUP INT TERM
+printf '\nPCC_SHARED_PASSWORD_HASH='
 printf '%s\n' "$PASSWORD" | docker run --rm -i "$IMAGE" hash-password \
-  | tr -d '\r\n' > "$secret_dir/PCC_SHARED_PASSWORD_HASH"
+  | tr -d '\r\n'
+printf '\n'
 unset PASSWORD
-openssl rand -base64 32 | tr '+/' '-_' | tr -d '=\n' \
-  > "$secret_dir/PCC_SESSION_KEYS"
-chmod 600 "$secret_dir"/*
-
-kubectl -n pcc create secret generic pcc-secrets \
-  --from-file="$secret_dir/PCC_SHARED_PASSWORD_HASH" \
-  --from-file="$secret_dir/PCC_SESSION_KEYS" \
-  --dry-run=client -o yaml | kubectl apply -f -
+trap - EXIT HUP INT TERM
+printf 'PCC_SESSION_KEYS='
+openssl rand -base64 32 | tr '+/' '-_' | tr -d '=\n'
+printf '\n'
 ```
+
+Save the following as `pcc-secrets.yaml`, replace both placeholders with the generated one-line values, and keep the file outside version control:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: pcc-secrets
+  namespace: pcc
+type: Opaque
+stringData:
+  PCC_SHARED_PASSWORD_HASH: "<change_me>"
+  PCC_SESSION_KEYS: "<change_me>"
+```
+
+Protect the file before creating the Secret. `kubectl create -f` reads the values from the file rather than placing them in command arguments.
+
+```sh
+chmod 600 pcc-secrets.yaml
+kubectl create namespace pcc
+kubectl create -f pcc-secrets.yaml
+```
+
+Delete the local Secret file after a separately protected backup exists. Do not commit it, paste it into issue comments, or include it in support logs.
 
 Keep the session key stable across restarts. Rotating it invalidates existing login sessions; comma-separated old keys may be retained after the new first key.
 
@@ -74,7 +91,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: pcc
-          image: git.kyu.sh/modelgarden/personal-connection-check:sha-12aaeff2522d
+          image: git.kyu.sh/modelgarden/personal-connection-check:v1.0.0
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
