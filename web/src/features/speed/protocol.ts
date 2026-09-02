@@ -44,7 +44,7 @@ export function createBrowserTransport(
       if (!signal.aborted) throw error;
     } finally {
       window.clearTimeout(timeout);
-      reader.cancel().catch(() => undefined);
+      await reader.cancel().catch(() => undefined);
     }
     return { bytes, samples };
   }
