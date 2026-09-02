@@ -13,7 +13,7 @@ This guide deploys one Personal Connection Check instance behind a WebSocket-cap
 - A TLS Secret named `pcc-tls`, created manually or by cert-manager
 - Bash, OpenSSL, and Docker on the administration machine for credential generation
 
-Use a fixed version tag for a stable deployment. The examples use `v1.0.0`; replace it when selecting another verified release.
+Use a fixed version tag for a stable deployment. The examples use `v1.0.2`; replace it when selecting another verified release.
 
 ## 2. Create the authentication Secret
 
@@ -21,7 +21,7 @@ Generate the password hash with the published image, without installing Argon2id
 
 ```bash
 read -rsp 'Shared password: ' PASSWORD; printf '\n'
-printf '%s\n' "$PASSWORD" | docker run --rm -i git.kyu.sh/modelgarden/personal-connection-check:v1.0.0 hash-password; unset PASSWORD
+printf '%s\n' "$PASSWORD" | docker run --rm -i git.kyu.sh/modelgarden/personal-connection-check:v1.0.2 hash-password; unset PASSWORD
 ```
 
 Generate the session key separately:
@@ -81,11 +81,13 @@ spec:
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
         seccompProfile:
           type: RuntimeDefault
       containers:
         - name: pcc
-          image: git.kyu.sh/modelgarden/personal-connection-check:v1.0.0
+          image: git.kyu.sh/modelgarden/personal-connection-check:v1.0.2
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

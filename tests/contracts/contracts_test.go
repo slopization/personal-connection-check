@@ -36,10 +36,13 @@ func TestDockerContract(t *testing.T) {
 		"FROM " + distBase,
 		"RUN rm -rf /src/internal/webui/dist && mkdir -p /src/internal/webui",
 		"COPY --from=web /src/web/dist /src/internal/webui/dist",
-		"USER nonroot:nonroot",
+		"USER 65532:65532",
 		"HEALTHCHECK",
 	} {
 		requireContains(t, s, want)
+	}
+	if strings.Contains(s, "USER nonroot") {
+		t.Fatal("Dockerfile user must be numeric for Kubernetes runAsNonRoot verification")
 	}
 	for _, line := range strings.Split(s, "\n") {
 		if strings.HasPrefix(strings.TrimSpace(line), "FROM ") && !strings.Contains(line, "@sha256:") {
@@ -48,6 +51,17 @@ func TestDockerContract(t *testing.T) {
 	}
 	if strings.Contains(s, "golang:1.27.1-alpine3.22") {
 		t.Fatal("Dockerfile uses nonexistent golang:1.27.1-alpine3.22")
+	}
+}
+
+func TestKubernetesDeploymentPinsNumericNonRootUser(t *testing.T) {
+	s := read(t, "../../docs/kubernetes-deployment.md")
+	for _, want := range []string{
+		"runAsNonRoot: true",
+		"runAsUser: 65532",
+		"runAsGroup: 65532",
+	} {
+		requireContains(t, s, want)
 	}
 }
 
