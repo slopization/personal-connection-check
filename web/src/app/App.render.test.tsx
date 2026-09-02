@@ -4,12 +4,22 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-async function loggedInApp() {
+async function loggedInApp(userAgent?: string) {
   vi.resetModules();
   Object.defineProperty(navigator, "language", {
     configurable: true,
     value: "ko-KR",
   });
+  if (userAgent) {
+    Object.defineProperty(navigator, "userAgent", {
+      configurable: true,
+      value: userAgent,
+    });
+    Object.defineProperty(navigator, "vendor", {
+      configurable: true,
+      value: "Apple Computer, Inc.",
+    });
+  }
   vi.stubGlobal(
     "fetch",
     vi.fn(async () => new Response(JSON.stringify({ ip: "127.0.0.1" }))),
@@ -66,5 +76,22 @@ describe("stability restoration and Korean UI", () => {
     expect(host.textContent).toContain("측정 일시정지");
     expect(host.textContent).toContain("샘플 없음");
     expect(host.textContent).not.toContain("No samples");
+  });
+
+  it("warns desktop Safari without disabling measurement", async () => {
+    const { clear } = await import("../storage/database");
+    await clear();
+    const host = await loggedInApp(
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15",
+    );
+
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain(
+      "데스크톱 Safari는 지원되지 않는 브라우저입니다",
+    );
+    expect(
+      [...host.querySelectorAll("button")].find(
+        (button) => button.textContent === "측정 시작",
+      )?.disabled,
+    ).toBe(false);
   });
 });

@@ -18,6 +18,7 @@ export type Copy = {
   png: string;
   network: string;
   unsupported: string;
+  desktopSafariWarning: string;
   paused: string;
   methodology: string;
   chartAria: string;
@@ -55,6 +56,8 @@ export const text: Record<Language, Copy> = {
     png: "Download PNG",
     network: "Network information",
     unsupported: "Not provided by this browser",
+    desktopSafariWarning:
+      "Desktop Safari is not a supported browser. The test remains available, but it may not complete; Chrome or Firefox is recommended.",
     paused: "Measurement paused",
     methodology:
       "Measured to this server; results include the operational path.",
@@ -90,6 +93,8 @@ export const text: Record<Language, Copy> = {
     png: "PNG 저장",
     network: "네트워크 정보",
     unsupported: "브라우저에서 제공하지 않음",
+    desktopSafariWarning:
+      "데스크톱 Safari는 지원되지 않는 브라우저입니다. 측정은 시도할 수 있지만 완료되지 않을 수 있으므로 Chrome 또는 Firefox를 권장합니다.",
     paused: "측정 일시정지",
     methodology: "이 서버까지의 운영 경로를 측정한 결과입니다.",
     chartAria: "안정성 차트",

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import { language, text } from "../i18n";
+import { isDesktopSafari } from "../browser";
 import {
   clear,
   latestStability,
@@ -103,6 +104,7 @@ export function downloadBlob(
   }
 }
 export function App() {
+  const desktopSafari = isDesktopSafari();
   const [password, setPassword] = useState("");
   const [logged, setLogged] = useState(false);
   const [status, setStatus] = useState("");
@@ -228,6 +230,11 @@ export function App() {
     return (
       <main>
         <h1>{t.title}</h1>
+        {desktopSafari && (
+          <p class="browser-warning" role="alert">
+            {t.desktopSafariWarning}
+          </p>
+        )}
         <label>
           {t.password}
           <input
@@ -261,6 +268,11 @@ export function App() {
           ))}
         </nav>
       </header>
+      {desktopSafari && (
+        <p class="browser-warning" role="alert">
+          {t.desktopSafariWarning}
+        </p>
+      )}
       {tab === "speed" && (
         <section>
           <button
