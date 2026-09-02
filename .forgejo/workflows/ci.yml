@@ -18,6 +18,8 @@ jobs:
           curl -fsSLo go.tgz https://go.dev/dl/go1.27.1.linux-amd64.tar.gz
           echo '63d339f0da5ab53635a56f2490a7984dfe12dfcff22ad749f63edaf590168445  go.tgz' | sha256sum -c -
           sudo tar -C /usr/local -xzf go.tgz
+          echo '/usr/local/go/bin' >> "$GITHUB_PATH"
+          /usr/local/go/bin/go version
       - name: provision pinned Node
         run: |
           set -euo pipefail

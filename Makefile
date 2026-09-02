@@ -1,4 +1,4 @@
-GO=PATH="$(CURDIR)/.tools/go/bin:$$PATH" go
+GO?=go
 IMAGE?=personal-connection-check:local
 web-assets:
 	cd web && npm run build

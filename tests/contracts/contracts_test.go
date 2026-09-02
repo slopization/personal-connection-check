@@ -60,6 +60,7 @@ func TestIgnoreContract(t *testing.T) {
 func TestMakeReleaseGateContract(t *testing.T) {
 	s := read(t, "../../Makefile")
 	for _, want := range []string{
+		"GO?=go",
 		"rm -rf internal/webui/dist",
 		"scripts/container-smoke.sh",
 		"release-gate: check e2e container container-smoke",
@@ -73,7 +74,7 @@ func TestMakeReleaseGateContract(t *testing.T) {
 
 func TestCIInvokesReleaseGateAfterBrowserInstall(t *testing.T) {
 	s := read(t, "../../.forgejo/workflows/ci.yml")
-	for _, want := range []string{"git checkout --detach \"$GITHUB_SHA\"", "GITHUB_SHA", "make e2e-install", "make release-gate"} {
+	for _, want := range []string{"git checkout --detach \"$GITHUB_SHA\"", "GITHUB_SHA", "GITHUB_PATH", "/usr/local/go/bin", "make e2e-install", "make release-gate"} {
 		requireContains(t, s, want)
 	}
 	if strings.Index(s, "make e2e-install") > strings.Index(s, "make release-gate") {
