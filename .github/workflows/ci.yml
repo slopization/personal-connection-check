@@ -26,23 +26,33 @@ jobs:
         run: |
           set -euo pipefail
           archive="$HOME/.cache/pcc-toolchains/go1.27.1.linux-amd64.tar.gz"
+          install="$HOME/.cache/pcc-toolchains/go1.27.1"
           mkdir -p "$(dirname "$archive")"
           test -f "$archive" || curl -fsSLo "$archive" https://go.dev/dl/go1.27.1.linux-amd64.tar.gz
           echo "63d339f0da5ab53635a56f2490a7984dfe12dfcff22ad749f63edaf590168445  $archive" | sha256sum -c -
-          sudo tar -C /usr/local -xzf "$archive"
-          echo '/usr/local/go/bin' >> "$GITHUB_PATH"
-          /usr/local/go/bin/go version
+          if [ ! -x "$install/bin/go" ]; then
+            rm -rf "$install"
+            mkdir -p "$install"
+            tar -C "$install" --strip-components=1 -xzf "$archive"
+          fi
+          echo "$install/bin" >> "$GITHUB_PATH"
+          "$install/bin/go" version
       - name: provision pinned Node
         run: |
           set -euo pipefail
           archive="$HOME/.cache/pcc-toolchains/node-v26.0.0-linux-x64.tar.xz"
+          install="$HOME/.cache/pcc-toolchains/node-v26.0.0"
           mkdir -p "$(dirname "$archive")"
           test -f "$archive" || curl -fsSLo "$archive" https://nodejs.org/dist/v26.0.0/node-v26.0.0-linux-x64.tar.xz
           echo "345d558514c62622b5c7d1f7b5f2a19c31ab1405d217df49f010c5ea8decc0f4  $archive" | sha256sum -c -
-          sudo tar -C /usr/local --strip-components=1 -xf "$archive"
-          echo '/usr/local/bin' >> "$GITHUB_PATH"
-          /usr/local/bin/node --version
-          /usr/local/bin/npm --version
+          if [ ! -x "$install/bin/node" ]; then
+            rm -rf "$install"
+            mkdir -p "$install"
+            tar -C "$install" --strip-components=1 -xf "$archive"
+          fi
+          echo "$install/bin" >> "$GITHUB_PATH"
+          "$install/bin/node" --version
+          "$install/bin/npm" --version
       - run: cd web && npm ci
       - run: go mod download
       - run: make e2e-install
