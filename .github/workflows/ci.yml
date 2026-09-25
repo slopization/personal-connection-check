@@ -1,0 +1,57 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: exact SHA detached checkout
+        run: |
+          set -euo pipefail
+          git init .
+          git remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
+          git fetch --depth=1 origin "$GITHUB_SHA"
+          git checkout --detach "$GITHUB_SHA"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+      - name: restore toolchain dependency and browser caches
+        uses: actions/cache/restore@1bd1e32a3bdc45362d1e726936510720a7c30a57
+        with:
+          path: |
+            ~/.cache/pcc-toolchains
+            ~/.cache/ms-playwright
+            ~/.cache/go-build
+            ~/go/pkg/mod
+            ~/.npm
+          key: pcc-${{ runner.os }}-go1.27.1-node26.0.0-playwright1.57.0-${{ hashFiles('go.sum', 'web/package-lock.json') }}
+      - name: provision pinned Go
+        run: |
+          set -euo pipefail
+          archive="$HOME/.cache/pcc-toolchains/go1.27.1.linux-amd64.tar.gz"
+          mkdir -p "$(dirname "$archive")"
+          test -f "$archive" || curl -fsSLo "$archive" https://go.dev/dl/go1.27.1.linux-amd64.tar.gz
+          echo "63d339f0da5ab53635a56f2490a7984dfe12dfcff22ad749f63edaf590168445  $archive" | sha256sum -c -
+          sudo tar -C /usr/local -xzf "$archive"
+          echo '/usr/local/go/bin' >> "$GITHUB_PATH"
+          /usr/local/go/bin/go version
+      - name: provision pinned Node
+        run: |
+          set -euo pipefail
+          archive="$HOME/.cache/pcc-toolchains/node-v26.0.0-linux-x64.tar.xz"
+          mkdir -p "$(dirname "$archive")"
+          test -f "$archive" || curl -fsSLo "$archive" https://nodejs.org/dist/v26.0.0/node-v26.0.0-linux-x64.tar.xz
+          echo "345d558514c62622b5c7d1f7b5f2a19c31ab1405d217df49f010c5ea8decc0f4  $archive" | sha256sum -c -
+          sudo tar -C /usr/local --strip-components=1 -xf "$archive"
+      - run: cd web && npm ci
+      - run: go mod download
+      - run: make e2e-install
+      - name: save toolchain dependency and browser caches
+        if: always()
+        uses: actions/cache/save@1bd1e32a3bdc45362d1e726936510720a7c30a57
+        with:
+          path: |
+            ~/.cache/pcc-toolchains
+            ~/.cache/ms-playwright
+            ~/.cache/go-build
+            ~/go/pkg/mod
+            ~/.npm
+          key: pcc-${{ runner.os }}-go1.27.1-node26.0.0-playwright1.57.0-${{ hashFiles('go.sum', 'web/package-lock.json') }}
+      - run: make check e2e
